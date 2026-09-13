@@ -11,6 +11,7 @@ use crate::config::{
 };
 use crate::error::OdmError;
 use crate::gitignore::apply_managed_gitignore;
+use crate::gitmodules::rewrite_gitmodules;
 use crate::paths::{abs_checkout, progen_index_dir, resolve_under_root, PathResolveError};
 use crate::pin_maintain::{maintain_pins_after, prune_pin_file_if_present};
 
@@ -149,7 +150,12 @@ pub fn membership_add<R: odm_git::CommandRunner>(
     if let Some(entity) = &managed {
         if !no_clone {
             outcome = Some(materialize(git, root, entity)?);
-            maintain_pins_after(git, root, config, &[entity])?;
+            if entity.checkout != CheckoutMode::Gitlink {
+                maintain_pins_after(git, root, config, &[entity])?;
+            }
+        }
+        if entity.checkout == CheckoutMode::Gitlink {
+            rewrite_gitmodules(root, config)?;
         }
     }
     Ok(outcome)

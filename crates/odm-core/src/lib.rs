@@ -9,6 +9,7 @@ mod error;
 mod fsutil;
 mod generate;
 mod gitignore;
+mod gitmodules;
 mod init;
 mod inventory;
 mod io;
@@ -40,6 +41,7 @@ pub use gitignore::{
     apply_managed_gitignore, desired_ancestor_lines, desired_block, desired_workspace_lines,
     update_workspace_gitignore, workspace_gitignore_has_drift, BEGIN_MARKER, END_MARKER,
 };
+pub use gitmodules::{gitmodules_path, rewrite_gitmodules};
 pub use init::{init_workspace, InitOptions, InitResult};
 pub use inventory::{
     observe_project_worktrees, observe_project_worktrees_soft, observe_worktree_registered_names,
