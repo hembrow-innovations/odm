@@ -62,7 +62,8 @@ pub use pin::{
     is_full_sha, load_pin, parse_pin_yaml, prune_pins, save_pin, PinEntry, PinFile,
 };
 pub use pin_maintain::{
-    pin_apply, pin_status, PinApplyResult, PinStatusEntry, PinStatusReport,
+    pin_apply, pin_record, pin_status, PinApplyResult, PinRecordResult, PinStatusEntry,
+    PinStatusReport,
 };
 pub use project_git::project_git;
 pub use status::{

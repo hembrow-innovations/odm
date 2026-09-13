@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI `--gitlink`** — `odm project add --gitlink` and `odm progen add --gitlink` require `--url` (usage 1 otherwise). JSON materialize label is `gitlink_added`. rm un-declares, unstages the gitlink, keeps the tree unless `--delete`, does not commit the workspace root, and does not write a lock key for that name. No `odm submodule` command.
 - **Gitlink sync and status** — `odm sync` on a gitlink name materializes if needed then fetches in the child. Child HEAD and parent gitlink SHA stay put. The lock file is not written for that name. `odm status --json` `in_sync` compares gitlink recorded SHA to child HEAD. Dirty is a separate field. `project git` auto-maintain skips gitlink.
 - **Gitlink doctor** — `odm doctor` fails `gitlink_extra`, `gitlink_missing`, `gitlink_conflict`, `checkout_mismatch`, and `gitmodules_layout`. `--fix` rewrites `.gitmodules` and gitignore from config. It does not rewrite remotes, pin apply, or import extra gitlinks as projects.
+- **Gitlink pin record** — `odm pin record [names] [--force]` stages child HEAD as the parent gitlink. Dirty refuses unless `--force`. Named clone is usage. Empty names means all gitlink-managed entries. Does not commit the workspace root. The pin file does not list gitlink names.
 
 ### Changed
 

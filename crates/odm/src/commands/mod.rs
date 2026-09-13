@@ -43,6 +43,6 @@ pub use worktree::{
     WorktreeListDto, WorktreePruneAllDto, WorktreePruneDto, WorktreeSlotActionDto, WorktreeSlotDto,
 };
 pub use workspace::{
-    doctor_cmd, init_cmd, pin_apply_cmd, pin_status_cmd, status_cmd, sync_cmd, InitDto,
-    PinApplyDto, PinStatusDto, SyncDto,
+    doctor_cmd, init_cmd, pin_apply_cmd, pin_record_cmd, pin_status_cmd, status_cmd, sync_cmd,
+    InitDto, PinApplyDto, PinRecordDto, PinStatusDto, SyncDto,
 };

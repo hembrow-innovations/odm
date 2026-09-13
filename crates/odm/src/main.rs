@@ -7,7 +7,7 @@ use odm::cli::{
 };
 use odm::commands::{
     backlinks_cmd, body_cmd, context_cmd, doctor_cmd, find_cmd, finish_run, generate_cmd, get_cmd,
-    init_cmd, ls_cmd, pin_apply_cmd, pin_status_cmd, progen_add_cmd, progen_doctor_cmd,
+    init_cmd, ls_cmd, pin_apply_cmd, pin_record_cmd, pin_status_cmd, progen_add_cmd, progen_doctor_cmd,
     progen_info_cmd, progen_list_cmd, progen_rm_cmd, project_add_cmd, project_git_cmd,
     project_info_cmd, project_list_cmd, project_rm_cmd, reindex_cmd, run_cmd, status_cmd, sync_cmd,
     tree_cmd, worktree_add_cmd, worktree_list_cmd, worktree_prune_cmd, worktree_rm_cmd,
@@ -82,6 +82,7 @@ fn dispatch(ctx: &mut Ctx, out: &GlobalOut, cmd: Commands) -> Result<i32, OdmErr
         Commands::Init { .. } => unreachable!("init handled before context open"),
         Commands::Sync { names } => finish(out, &sync_cmd(ctx, &names)?),
         Commands::Pin { cmd } => match cmd {
+            PinCmd::Record { names, force } => finish(out, &pin_record_cmd(ctx, &names, force)?),
             PinCmd::Apply { names, force } => finish(out, &pin_apply_cmd(ctx, &names, force)?),
             PinCmd::Status { names } => finish(out, &pin_status_cmd(ctx, &names)?),
         },

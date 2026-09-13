@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 
 use odm_core::{
-    format_doctor_human, format_status_human, init_workspace, pin_apply, pin_status, run_doctor,
-    sync_managed, InitOptions, InitResult, OdmError, PinApplyResult, PinStatusReport, StatusSnapshot,
+    format_doctor_human, format_status_human, init_workspace, pin_apply, pin_record, pin_status,
+    run_doctor, sync_managed, InitOptions, InitResult, OdmError, PinApplyResult, PinRecordResult,
+    PinStatusReport, StatusSnapshot,
 };
 use serde::Serialize;
 
@@ -125,6 +126,57 @@ impl From<&PinApplyResult> for PinApplyItemDto {
             detached: r.detached,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PinRecordDto {
+    pub results: Vec<PinRecordItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PinRecordItemDto {
+    pub name: String,
+    pub status: String,
+    pub rev: Option<String>,
+}
+
+impl From<&PinRecordResult> for PinRecordItemDto {
+    fn from(r: &PinRecordResult) -> Self {
+        Self {
+            name: r.name.clone(),
+            status: r.status.clone(),
+            rev: r.rev.clone(),
+        }
+    }
+}
+
+pub fn pin_record_cmd(
+    ctx: &Ctx,
+    names: &[String],
+    force: bool,
+) -> Result<Ready<PinRecordDto>, OdmError> {
+    let results = pin_record(&ctx.git, &ctx.ws.root, &ctx.ws.config, names, force)?;
+    let dto = PinRecordDto {
+        results: results.iter().map(PinRecordItemDto::from).collect(),
+    };
+    if !results.is_empty() {
+        eprintln!("parent index is dirty until you commit");
+    }
+    let human = if results.is_empty() {
+        "(nothing to record)\n".into()
+    } else {
+        let mut s = String::new();
+        for r in &results {
+            s.push_str(&format!(
+                "{}\t{}\t{}\n",
+                r.name,
+                r.status,
+                r.rev.as_deref().unwrap_or("-"),
+            ));
+        }
+        s
+    };
+    Ok(Ready::ok(dto, human))
 }
 
 pub fn pin_apply_cmd(
@@ -260,6 +312,22 @@ mod tests {
         assert_eq!(v["results"][0]["materialized"], "already_present");
         assert_eq!(v["results"][0]["fetched"], true);
         assert_eq!(v["results"][0]["head"], "abc");
+    }
+
+    #[test]
+    fn pin_record_dto_json_shape() {
+        let dto = PinRecordDto {
+            results: vec![PinRecordItemDto {
+                name: "nested".into(),
+                status: "recorded".into(),
+                rev: Some("dead".into()),
+            }],
+        };
+        let v = serde_json::to_value(&dto).unwrap();
+        assert_eq!(v["results"][0]["name"], "nested");
+        assert_eq!(v["results"][0]["status"], "recorded");
+        assert_eq!(v["results"][0]["rev"], "dead");
+        assert!(v["results"][0].get("detached").is_none());
     }
 
     #[test]

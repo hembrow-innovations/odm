@@ -4,8 +4,10 @@ use std::path::Path;
 
 use odm_git::Git;
 
+use odm_git::GitlinkRecord;
+
 use crate::checkout::{all_managed, resolve_managed, ManagedEntity};
-use crate::config::WorkspaceConfig;
+use crate::config::{CheckoutMode, WorkspaceConfig};
 use crate::error::OdmError;
 use crate::paths::abs_checkout;
 use crate::pin::{load_pin, prune_pins, save_pin, PinEntry, PinFile};
@@ -47,6 +49,13 @@ pub struct PinApplyResult {
     pub rev: Option<String>,
     /// Always true on success — apply checks out detached HEAD by design.
     pub detached: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinRecordResult {
+    pub name: String,
+    pub status: String,
+    pub rev: Option<String>,
 }
 
 /// Create/update pin file for managed entities that have a defined HEAD.
@@ -145,6 +154,85 @@ pub fn pin_status<R: odm_git::CommandRunner>(
         present,
         entries,
     })
+}
+
+/// Stage gitlink child HEAD into the parent index. Does not commit.
+/// Dirty child → fail unless force. Named clone → Usage.
+pub fn pin_record<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    root: &Path,
+    config: &WorkspaceConfig,
+    names: &[String],
+    force: bool,
+) -> Result<Vec<PinRecordResult>, OdmError> {
+    if !git.is_repo_root(root)? {
+        return Err(OdmError::operation("gitlink requires a git workspace root"));
+    }
+
+    let entities = if names.is_empty() {
+        all_managed(config)
+            .into_iter()
+            .filter(|e| e.checkout == CheckoutMode::Gitlink)
+            .collect()
+    } else {
+        let resolved = resolve_managed(config, names)?;
+        for e in &resolved {
+            if e.checkout != CheckoutMode::Gitlink {
+                return Err(OdmError::usage(format!(
+                    "'{}' is not a gitlink entry",
+                    e.name
+                )));
+            }
+        }
+        resolved
+    };
+
+    let dirty = if force {
+        DirtyAction::Force
+    } else {
+        DirtyAction::Refuse
+    };
+
+    let mut results = Vec::new();
+    for entity in entities {
+        let path = abs_checkout(root, &entity.path)?;
+        if !path.exists() {
+            return Err(OdmError::not_found(format!(
+                "path missing for '{}': {}",
+                entity.name, entity.path
+            )));
+        }
+        if !git.is_repo(&path)? {
+            return Err(OdmError::not_found(format!(
+                "path is not a git repo for '{}': {}",
+                entity.name, entity.path
+            )));
+        }
+        if dirty == DirtyAction::Refuse && !git.is_clean(&path)? {
+            return Err(OdmError::operation(format!(
+                "working tree dirty for '{}' (use --force)",
+                entity.name
+            )));
+        }
+        let rev = git.head_sha(&path)?;
+        let rel = Path::new(&entity.path);
+        match git.gitlink_record(root, rel)? {
+            GitlinkRecord::Recorded { sha } if sha == rev => {}
+            GitlinkRecord::Conflict => {
+                return Err(OdmError::operation(format!(
+                    "gitlink index is in conflict for '{}'",
+                    entity.name
+                )));
+            }
+            _ => git.update_gitlink(root, rel, &rev)?,
+        }
+        results.push(PinRecordResult {
+            name: entity.name,
+            status: "recorded".into(),
+            rev: Some(rev),
+        });
+    }
+    Ok(results)
 }
 
 /// Apply pins (detached HEAD). Dirty → fail unless force. Missing path → NotFound.
@@ -251,6 +339,8 @@ mod tests {
     use super::*;
     use crate::checkout::{sync_managed, ManagedEntity};
     use crate::config::{save_config, ProjectEntry, WorkspaceConfig};
+    use crate::error::OdmError;
+    use odm_git::Git;
     use crate::init::{init_workspace, InitOptions};
     use crate::pin::load_pin;
     use std::fs;
@@ -399,5 +489,35 @@ mod tests {
         let err = pin_apply(&g, &root, &cfg, &[], false).unwrap_err();
         assert!(err.to_string().contains("dirty"));
         pin_apply(&g, &root, &cfg, &[], true).unwrap();
+    }
+
+    #[test]
+    fn pin_record_named_clone_is_usage() {
+        let dir = tempdir().unwrap();
+        let res = init_workspace(InitOptions {
+            path: dir.path().to_path_buf(),
+            no_git: false,
+            name: None,
+        })
+        .unwrap();
+        let root = res.root;
+        let mut cfg = WorkspaceConfig::default();
+        cfg.projects.insert(
+            "alpha".into(),
+            ProjectEntry {
+                path: "projects/alpha".into(),
+                url: Some("https://example.com/alpha.git".into()),
+                branch: Some("main".into()),
+                type_: None,
+                ..Default::default()
+            },
+        );
+        save_config(&root, &cfg).unwrap();
+        let g = Git::new();
+        let err = pin_record(&g, &root, &cfg, &["alpha".into()], false).unwrap_err();
+        assert!(matches!(err, OdmError::Usage(_)));
+        assert!(err.to_string().contains("gitlink"));
+        let empty = pin_record(&g, &root, &cfg, &[], false).unwrap();
+        assert!(empty.is_empty());
     }
 }

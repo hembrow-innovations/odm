@@ -103,7 +103,7 @@ pub enum Commands {
         names: Vec<String>,
     },
 
-    /// Pin file apply / status.
+    /// Pin record / apply / status.
     Pin {
         #[command(subcommand)]
         cmd: PinCmd,
@@ -173,6 +173,12 @@ pub enum Commands {
 
 #[derive(Debug, Subcommand)]
 pub enum PinCmd {
+    /// Stage gitlink child HEAD into the parent index.
+    Record {
+        names: Vec<String>,
+        #[arg(long)]
+        force: bool,
+    },
     /// Checkout pinned revs as detached HEAD.
     Apply {
         names: Vec<String>,
