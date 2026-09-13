@@ -298,6 +298,7 @@ mod tests {
                 url: Some("u".into()),
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         cfg.projects.insert(
@@ -307,6 +308,7 @@ mod tests {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         update_workspace_gitignore(dir.path(), &cfg).unwrap();
@@ -369,6 +371,7 @@ mod tests {
                 url: Some("u1".into()),
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         cfg.projects.insert(
@@ -378,6 +381,7 @@ mod tests {
                 url: Some("u2".into()),
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CheckoutMode** — optional `checkout: gitlink` on Project and Progen entries. Default clone is omitted from YAML. Load rejects gitlink without url and gitlink nested under another managed path.
+
 ### Changed
 
 - **Website** — visitor HTML moved to [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web) (https://hembrow-innovations.github.io/odm-web/). `https://hembrow-innovations.github.io/odm/` is a redirect stub.

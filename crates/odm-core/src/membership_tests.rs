@@ -83,6 +83,7 @@ fn project_add_rm_cycle() {
             url: Some(bare.to_string_lossy().into()),
             branch: Some("main".into()),
             type_: None,
+            ..Default::default()
         },
         false,
     )
@@ -120,6 +121,7 @@ fn progen_rm_strips_group_and_index_dir() {
             path: "vaults/desk".into(),
             url: None,
             branch: None,
+            ..Default::default()
         },
         false,
     )
@@ -165,6 +167,7 @@ fn project_add_rejects_path_escape_without_writing_config() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
         true,
     )
@@ -196,6 +199,7 @@ fn progen_add_rejects_path_escape_without_writing_config() {
             path: "a/../../outside".into(),
             url: None,
             branch: None,
+            ..Default::default()
         },
         true,
     )
@@ -227,6 +231,7 @@ fn project_add_still_rejects_absolute_path() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
         true,
     )
@@ -257,6 +262,7 @@ fn membership_add_rejects_cross_map_name() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
         true,
     )
@@ -270,6 +276,7 @@ fn membership_add_rejects_cross_map_name() {
             path: "progens/shared".into(),
             url: None,
             branch: None,
+            ..Default::default()
         },
         true,
     )
@@ -304,6 +311,7 @@ fn membership_add_rejects_unsafe_entity_name() {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
             true,
         )
@@ -321,6 +329,7 @@ fn membership_add_rejects_unsafe_entity_name() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
         true,
     )

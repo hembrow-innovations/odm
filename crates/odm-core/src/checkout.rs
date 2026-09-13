@@ -5,7 +5,7 @@ use std::path::Path;
 
 use odm_git::Git;
 
-use crate::config::WorkspaceConfig;
+use crate::config::{CheckoutMode, WorkspaceConfig};
 use crate::error::OdmError;
 use crate::paths::abs_checkout;
 use crate::pin_maintain::maintain_pins_after;
@@ -18,6 +18,19 @@ pub struct ManagedEntity {
     pub path: String,
     pub url: String,
     pub branch: Option<String>,
+    pub checkout: CheckoutMode,
+}
+
+impl Default for ManagedEntity {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            path: String::new(),
+            url: String::new(),
+            branch: None,
+            checkout: CheckoutMode::Clone,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +57,7 @@ pub fn all_managed(config: &WorkspaceConfig) -> Vec<ManagedEntity> {
                 path: e.path.clone(),
                 url: url.clone(),
                 branch: e.branch.clone(),
+                checkout: e.checkout,
             });
         }
     }
@@ -54,6 +68,7 @@ pub fn all_managed(config: &WorkspaceConfig) -> Vec<ManagedEntity> {
                 path: e.path.clone(),
                 url: url.clone(),
                 branch: e.branch.clone(),
+                checkout: e.checkout,
             });
         }
     }
@@ -79,6 +94,7 @@ pub fn resolve_managed(
                 path: e.path.clone(),
                 url: url.clone(),
                 branch: e.branch.clone(),
+                checkout: e.checkout,
             });
             continue;
         }
@@ -91,6 +107,7 @@ pub fn resolve_managed(
                 path: e.path.clone(),
                 url: url.clone(),
                 branch: e.branch.clone(),
+                checkout: e.checkout,
             });
             continue;
         }
@@ -204,9 +221,8 @@ pub fn materialize<R: odm_git::CommandRunner>(
 }
 
 fn is_empty_dir(path: &Path) -> Result<bool, OdmError> {
-    let mut rd = fs::read_dir(path).map_err(|e| {
-        OdmError::operation(format!("failed to read {}: {e}", path.display()))
-    })?;
+    let mut rd = fs::read_dir(path)
+        .map_err(|e| OdmError::operation(format!("failed to read {}: {e}", path.display())))?;
     Ok(rd.next().is_none())
 }
 
@@ -256,7 +272,13 @@ mod tests {
 
     fn git_user(repo: &Path) {
         Command::new("git")
-            .args(["-C", repo.to_str().unwrap(), "config", "user.email", "t@est"])
+            .args([
+                "-C",
+                repo.to_str().unwrap(),
+                "config",
+                "user.email",
+                "t@est",
+            ])
             .status()
             .unwrap();
         Command::new("git")
@@ -311,18 +333,21 @@ mod tests {
                 path: "a/b/c".into(),
                 url: "u".into(),
                 branch: None,
+                ..Default::default()
             },
             ManagedEntity {
                 name: "rootish".into(),
                 path: "a".into(),
                 url: "u".into(),
                 branch: None,
+                ..Default::default()
             },
             ManagedEntity {
                 name: "mid".into(),
                 path: "a/b".into(),
                 url: "u".into(),
                 branch: None,
+                ..Default::default()
             },
         ];
         sort_by_depth(&mut ents);
@@ -343,6 +368,7 @@ mod tests {
             path: "projects/alpha".into(),
             url: bare.to_string_lossy().into(),
             branch: Some("main".into()),
+            ..Default::default()
         };
         assert_eq!(
             materialize(&g, root, &entity).unwrap(),
@@ -369,6 +395,7 @@ mod tests {
             path: "proj".into(),
             url: bare_b.to_string_lossy().into(),
             branch: None,
+            ..Default::default()
         };
         let err = materialize(&g, root, &entity).unwrap_err();
         assert!(err.to_string().contains("origin mismatch"));
@@ -388,6 +415,7 @@ mod tests {
             path: "proj".into(),
             url: "https://example.com/x.git".into(),
             branch: None,
+            ..Default::default()
         };
         let err = materialize(&g, root, &entity).unwrap_err();
         assert!(err.to_string().contains("not a git repository"));
@@ -412,6 +440,7 @@ mod tests {
                 url: Some(bare.to_string_lossy().into()),
                 branch: Some("main".into()),
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(&root, &cfg).unwrap();
@@ -441,6 +470,7 @@ mod tests {
                 url: Some(bare.to_string_lossy().into()),
                 branch: Some("main".into()),
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(&root, &cfg).unwrap();

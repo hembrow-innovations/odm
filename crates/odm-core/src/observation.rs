@@ -180,6 +180,7 @@ mod tests {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         cfg.projects.insert(
@@ -189,6 +190,7 @@ mod tests {
                 url: Some("https://example.com/m.git".into()),
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(dir.path(), &cfg).unwrap();
@@ -247,6 +249,7 @@ mod tests {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(dir.path(), &cfg).unwrap();
@@ -274,6 +277,7 @@ mod tests {
                 path: "progens/desk".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         save_config(dir.path(), &cfg).unwrap();
@@ -307,6 +311,7 @@ mod tests {
                 path: "progens/vault".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         save_config(dir.path(), &cfg).unwrap();

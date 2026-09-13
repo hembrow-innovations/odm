@@ -58,6 +58,20 @@ impl WorkspaceConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CheckoutMode {
+    #[default]
+    Clone,
+    Gitlink,
+}
+
+impl CheckoutMode {
+    fn is_clone(&self) -> bool {
+        matches!(self, Self::Clone)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectEntry {
@@ -68,6 +82,20 @@ pub struct ProjectEntry {
     pub branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "type")]
     pub type_: Option<String>,
+    #[serde(default, skip_serializing_if = "CheckoutMode::is_clone")]
+    pub checkout: CheckoutMode,
+}
+
+impl Default for ProjectEntry {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            url: None,
+            branch: None,
+            type_: None,
+            checkout: CheckoutMode::Clone,
+        }
+    }
 }
 
 impl ProjectEntry {
@@ -84,6 +112,19 @@ pub struct ProgenEntry {
     pub url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "CheckoutMode::is_clone")]
+    pub checkout: CheckoutMode,
+}
+
+impl Default for ProgenEntry {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            url: None,
+            branch: None,
+            checkout: CheckoutMode::Clone,
+        }
+    }
 }
 
 impl ProgenEntry {
@@ -143,9 +184,8 @@ pub fn load_workspace(root: &Path) -> Result<Workspace, OdmError> {
             path.display()
         )));
     }
-    let text = fs::read_to_string(&path).map_err(|e| {
-        OdmError::workspace(format!("failed to read {}: {e}", path.display()))
-    })?;
+    let text = fs::read_to_string(&path)
+        .map_err(|e| OdmError::workspace(format!("failed to read {}: {e}", path.display())))?;
     let config = parse_config_yaml(&text)?;
     validate_and_load_bundles(root, config)
 }
@@ -155,9 +195,8 @@ pub fn parse_config_yaml(text: &str) -> Result<WorkspaceConfig, OdmError> {
     if trimmed.is_empty() {
         return Ok(WorkspaceConfig::default());
     }
-    serde_yaml::from_str(trimmed).map_err(|e| {
-        OdmError::workspace(format!("invalid config YAML: {e}"))
-    })
+    serde_yaml::from_str(trimmed)
+        .map_err(|e| OdmError::workspace(format!("invalid config YAML: {e}")))
 }
 
 pub fn validate_and_load_bundles(
@@ -165,6 +204,7 @@ pub fn validate_and_load_bundles(
     config: WorkspaceConfig,
 ) -> Result<Workspace, OdmError> {
     validate_entity_names_and_paths(&config)?;
+    validate_checkout(&config)?;
     validate_progen_groups(&config)?;
     let actions = load_action_bundles(root, &config.actions)?;
     let generators = load_generator_bundles(root, &config.generators)?;
@@ -204,7 +244,9 @@ fn validate_entity_names_and_paths(config: &WorkspaceConfig) -> Result<(), OdmEr
 
 fn require_non_empty_name(kind: &str, name: &str) -> Result<(), OdmError> {
     if name.trim().is_empty() {
-        return Err(OdmError::workspace(format!("{kind} name must not be empty")));
+        return Err(OdmError::workspace(format!(
+            "{kind} name must not be empty"
+        )));
     }
     Ok(())
 }
@@ -213,7 +255,9 @@ fn require_non_empty_name(kind: &str, name: &str) -> Result<(), OdmError> {
 pub fn require_entity_name(kind: &str, name: &str) -> Result<(), OdmError> {
     match parse_path_token(name) {
         Ok(_) => Ok(()),
-        Err("empty") => Err(OdmError::workspace(format!("{kind} name must not be empty"))),
+        Err("empty") => Err(OdmError::workspace(format!(
+            "{kind} name must not be empty"
+        ))),
         Err("dot") => Err(OdmError::workspace(format!(
             "invalid {kind} name '{}'",
             name.trim()
@@ -264,6 +308,80 @@ fn validate_action_task_dir(action: &str, task_i: usize, dir: &str) -> Result<()
     Ok(())
 }
 
+fn url_blank(url: Option<&str>) -> bool {
+    url.map(|u| u.trim().is_empty()).unwrap_or(true)
+}
+
+fn path_is_under(child: &str, parent: &str) -> bool {
+    let child = Path::new(child);
+    let parent = Path::new(parent);
+    child.starts_with(parent) && child != parent
+}
+
+fn validate_checkout(config: &WorkspaceConfig) -> Result<(), OdmError> {
+    let mut managed_paths: Vec<(&str, &str)> = Vec::new();
+    for (name, e) in &config.projects {
+        if e.is_managed() {
+            managed_paths.push((name.as_str(), e.path.as_str()));
+        }
+    }
+    for (name, e) in &config.progens {
+        if e.is_managed() {
+            managed_paths.push((name.as_str(), e.path.as_str()));
+        }
+    }
+    for (name, e) in &config.projects {
+        reject_bad_gitlink(
+            "project",
+            name,
+            &e.path,
+            e.url.as_deref(),
+            e.checkout,
+            &managed_paths,
+        )?;
+    }
+    for (name, e) in &config.progens {
+        reject_bad_gitlink(
+            "progen",
+            name,
+            &e.path,
+            e.url.as_deref(),
+            e.checkout,
+            &managed_paths,
+        )?;
+    }
+    Ok(())
+}
+
+fn reject_bad_gitlink(
+    kind: &str,
+    name: &str,
+    path: &str,
+    url: Option<&str>,
+    checkout: CheckoutMode,
+    managed_paths: &[(&str, &str)],
+) -> Result<(), OdmError> {
+    if checkout != CheckoutMode::Gitlink {
+        return Ok(());
+    }
+    if url_blank(url) {
+        return Err(OdmError::workspace(format!(
+            "{kind} '{name}' checkout gitlink requires url"
+        )));
+    }
+    for (other_name, other_path) in managed_paths {
+        if *other_name == name {
+            continue;
+        }
+        if path_is_under(path, other_path) {
+            return Err(OdmError::workspace(format!(
+                "{kind} '{name}' gitlink path '{path}' is nested under managed path '{other_path}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn validate_progen_groups(config: &WorkspaceConfig) -> Result<(), OdmError> {
     for (group, members) in &config.progen_groups {
         for m in members {
@@ -305,15 +423,13 @@ fn load_action_bundles(
                 "action bundle '{bundle_name}' path does not exist: {rel}"
             )));
         }
-        let text = fs::read_to_string(&path).map_err(|e| {
-            OdmError::workspace(format!("failed to read action bundle {rel}: {e}"))
-        })?;
+        let text = fs::read_to_string(&path)
+            .map_err(|e| OdmError::workspace(format!("failed to read action bundle {rel}: {e}")))?;
         let map: BTreeMap<String, ActionDef> = if text.trim().is_empty() {
             BTreeMap::new()
         } else {
-            serde_yaml::from_str(&text).map_err(|e| {
-                OdmError::workspace(format!("invalid action bundle {rel}: {e}"))
-            })?
+            serde_yaml::from_str(&text)
+                .map_err(|e| OdmError::workspace(format!("invalid action bundle {rel}: {e}")))?
         };
         for (name, def) in map {
             if merged.contains_key(&name) {
@@ -360,9 +476,8 @@ fn load_generator_bundles(
         let map: BTreeMap<String, GeneratorDef> = if text.trim().is_empty() {
             BTreeMap::new()
         } else {
-            serde_yaml::from_str(&text).map_err(|e| {
-                OdmError::workspace(format!("invalid generator bundle {rel}: {e}"))
-            })?
+            serde_yaml::from_str(&text)
+                .map_err(|e| OdmError::workspace(format!("invalid generator bundle {rel}: {e}")))?
         };
         for (name, def) in map {
             if merged.contains_key(&name) {
@@ -370,8 +485,16 @@ fn load_generator_bundles(
                     "duplicate generator name '{name}' (also in bundle '{bundle_name}')"
                 )));
             }
-            if def.template.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true)
-                && def.url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true)
+            if def
+                .template
+                .as_ref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+                && def
+                    .url
+                    .as_ref()
+                    .map(|s| s.trim().is_empty())
+                    .unwrap_or(true)
             {
                 return Err(OdmError::workspace(format!(
                     "generator '{name}' needs template and/or url"
@@ -428,6 +551,7 @@ mod tests {
                 url: None,
                 branch: None,
                 type_: None,
+                checkout: CheckoutMode::Clone,
             },
         );
         c.projects.insert(
@@ -437,6 +561,7 @@ mod tests {
                 url: Some("https://example.com/a.git".into()),
                 branch: Some("main".into()),
                 type_: Some("service".into()),
+                checkout: CheckoutMode::Clone,
             },
         );
         let yaml = serde_yaml::to_string(&c).unwrap();
@@ -698,7 +823,10 @@ progens:
         let c = parse_config_yaml(yaml).unwrap();
         let dir = tempdir().unwrap();
         let err = validate_and_load_bundles(dir.path(), c).unwrap_err();
-        assert!(err.to_string().contains("both a project and a progen"), "{err}");
+        assert!(
+            err.to_string().contains("both a project and a progen"),
+            "{err}"
+        );
         assert!(matches!(err, OdmError::Workspace(_)));
     }
 
@@ -715,6 +843,7 @@ progens:
                     url: None,
                     branch: None,
                     type_: None,
+                    checkout: CheckoutMode::Clone,
                 },
             );
             let err = validate_and_load_bundles(dir.path(), c).unwrap_err();
@@ -726,5 +855,67 @@ progens:
         let yaml = "projects:\n  good-name:\n    path: p\nprogens:\n  other:\n    path: q\n";
         let c = parse_config_yaml(yaml).unwrap();
         validate_and_load_bundles(dir.path(), c).unwrap();
+    }
+
+    #[test]
+    fn checkout_mode() {
+        let omitted = "projects:\n  p:\n    path: x\n    url: https://example.com/p.git\n";
+        let c = parse_config_yaml(omitted).unwrap();
+        assert_eq!(c.projects["p"].checkout, CheckoutMode::Clone);
+        let yaml = serde_yaml::to_string(&c).unwrap();
+        assert!(!yaml.contains("checkout"), "{yaml}");
+        let back: WorkspaceConfig = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(back.projects["p"].checkout, CheckoutMode::Clone);
+
+        let gitlink = r#"
+projects:
+  p:
+    path: vendor/p
+    url: https://example.com/p.git
+    checkout: gitlink
+progens:
+  g:
+    path: vendor/g
+    url: https://example.com/g.git
+    checkout: gitlink
+"#;
+        let c = parse_config_yaml(gitlink).unwrap();
+        assert_eq!(c.projects["p"].checkout, CheckoutMode::Gitlink);
+        assert_eq!(c.progens["g"].checkout, CheckoutMode::Gitlink);
+        let dir = tempdir().unwrap();
+        validate_and_load_bundles(dir.path(), c.clone()).unwrap();
+        let out = serde_yaml::to_string(&c).unwrap();
+        assert!(out.contains("checkout: gitlink"), "{out}");
+
+        let nested = r#"
+projects:
+  parent:
+    path: vendor
+    url: https://example.com/parent.git
+  child:
+    path: vendor/nested
+    url: https://example.com/child.git
+    checkout: gitlink
+"#;
+        let c = parse_config_yaml(nested).unwrap();
+        let err = validate_and_load_bundles(dir.path(), c).unwrap_err();
+        assert!(err.to_string().contains("nested"), "{err}");
+        assert!(matches!(err, OdmError::Workspace(_)));
+    }
+
+    #[test]
+    fn gitlink_requires_url() {
+        let dir = tempdir().unwrap();
+        let project = "projects:\n  p:\n    path: x\n    checkout: gitlink\n";
+        let c = parse_config_yaml(project).unwrap();
+        let err = validate_and_load_bundles(dir.path(), c).unwrap_err();
+        assert!(err.to_string().contains("url"), "{err}");
+        assert!(matches!(err, OdmError::Workspace(_)));
+
+        let progen = "progens:\n  g:\n    path: docs\n    checkout: gitlink\n";
+        let c = parse_config_yaml(progen).unwrap();
+        let err = validate_and_load_bundles(dir.path(), c).unwrap_err();
+        assert!(err.to_string().contains("url"), "{err}");
+        assert!(matches!(err, OdmError::Workspace(_)));
     }
 }

@@ -120,6 +120,7 @@ fn ws_with_project(root: PathBuf, name: &str, rel: &str) -> Workspace {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     Workspace {
@@ -593,6 +594,7 @@ fn ws_with_projects(root: PathBuf, projects: &[(&str, &str)]) -> Workspace {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
     }

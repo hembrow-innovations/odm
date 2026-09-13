@@ -144,6 +144,7 @@ fn ws_project_and_progen(root: PathBuf) -> Workspace {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     let mut progens = BTreeMap::new();
@@ -153,6 +154,7 @@ fn ws_project_and_progen(root: PathBuf) -> Workspace {
             path: "progens/notes".into(),
             url: None,
             branch: None,
+            ..Default::default()
         },
     );
     Workspace {
@@ -336,6 +338,7 @@ fn build_status_empty_orphans_when_missing_worktrees_dir() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     let ws = Workspace {
@@ -381,6 +384,7 @@ fn build_status_empty_slots_when_list_errors_or_non_git() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     let ws = Workspace {
@@ -420,6 +424,7 @@ fn build_status_soft_fails_worktree_list_error() {
             url: None,
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     let ws = Workspace {

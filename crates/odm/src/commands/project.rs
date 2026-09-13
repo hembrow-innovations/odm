@@ -212,6 +212,7 @@ pub fn add_cmd(
         url,
         branch,
         type_,
+        ..Default::default()
     };
     let outcome = project_add(
         &ctx.git,
@@ -319,6 +320,7 @@ mod tests {
                 url: Some("https://example.com/a.git".into()),
                 branch: Some("main".into()),
                 type_: Some("app".into()),
+                ..Default::default()
             },
         );
         Workspace {

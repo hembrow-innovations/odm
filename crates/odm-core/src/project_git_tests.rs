@@ -95,6 +95,7 @@ fn ws_with_project(root: PathBuf, name: &str, rel: &str, url: Option<&str>) -> W
             url: url.map(|s| s.into()),
             branch: None,
             type_: None,
+            ..Default::default()
         },
     );
     Workspace {

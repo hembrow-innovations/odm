@@ -229,6 +229,7 @@ mod tests {
                 path: "vaults/gone".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let ws = ws_with(root.to_path_buf(), progens);
@@ -259,6 +260,7 @@ mod tests {
                 path: "vaults/main".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let ws = ws_with(root.to_path_buf(), progens);

@@ -303,6 +303,7 @@ mod tests {
                 url: Some(bare.to_string_lossy().into()),
                 branch: Some("main".into()),
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(&root, &cfg).unwrap();
@@ -340,6 +341,7 @@ mod tests {
                 url: Some(bare.to_string_lossy().into()),
                 branch: Some("main".into()),
                 type_: None,
+                ..Default::default()
             },
         );
         save_config(&root, &cfg).unwrap();

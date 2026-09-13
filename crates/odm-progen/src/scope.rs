@@ -147,6 +147,7 @@ mod tests {
                 path: "va".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         p.insert(
@@ -155,6 +156,7 @@ mod tests {
                 path: "vb".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let ws = ws_with(dir.path().to_path_buf(), p, BTreeMap::new());
@@ -174,6 +176,7 @@ mod tests {
                 path: "va".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         p.insert(
@@ -182,6 +185,7 @@ mod tests {
                 path: "vb".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         p.insert(
@@ -190,6 +194,7 @@ mod tests {
                 path: "vc".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let mut g = BTreeMap::new();
@@ -209,6 +214,7 @@ mod tests {
                 path: "va".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         p.insert(
@@ -217,6 +223,7 @@ mod tests {
                 path: "vb".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let ws = ws_with(dir.path().to_path_buf(), p, BTreeMap::new());

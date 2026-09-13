@@ -343,6 +343,7 @@ mod tests {
                 path: vault_rel.into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();
@@ -477,6 +478,7 @@ mod tests {
                 path: "va".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         progens.insert(
@@ -485,6 +487,7 @@ mod tests {
                 path: "vb".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();
@@ -524,6 +527,7 @@ mod tests {
                 path: "va".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         progens.insert(
@@ -532,6 +536,7 @@ mod tests {
                 path: "vb".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();

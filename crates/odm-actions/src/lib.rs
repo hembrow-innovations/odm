@@ -211,6 +211,7 @@ mod tests {
                 url: None,
                 branch: None,
                 type_: None,
+                ..Default::default()
             },
         );
         Workspace {

@@ -226,6 +226,7 @@ pub fn add_cmd(
         path: rel,
         url,
         branch,
+        ..Default::default()
     };
     let outcome = add_progen(
         &ctx.git,
@@ -389,6 +390,7 @@ mod tests {
                 path: "progens/notes".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         let ws = Workspace {

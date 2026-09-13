@@ -70,6 +70,7 @@ pub fn project_git<R: odm_git::CommandRunner>(
                     path: entry.path.clone(),
                     url: url.clone(),
                     branch: entry.branch.clone(),
+                    checkout: entry.checkout,
                 };
                 maintain_pins_after(git, &ws.root, &ws.config, &[&entity])?;
             }

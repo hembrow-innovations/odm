@@ -517,6 +517,7 @@ mod tests {
                 path: "mem".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();
@@ -563,6 +564,7 @@ mod tests {
                 path: "mem".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();
@@ -633,6 +635,7 @@ mod tests {
                 path: vault_rel.into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
         );
         fs::create_dir_all(root.join(".odm")).unwrap();

@@ -7,7 +7,7 @@ use odm_git::Git;
 
 use crate::checkout::{materialize, ManagedEntity, MaterializeOutcome};
 use crate::config::{
-    require_entity_name, save_config, ProjectEntry, ProgenEntry, WorkspaceConfig,
+    require_entity_name, save_config, CheckoutMode, ProjectEntry, ProgenEntry, WorkspaceConfig,
 };
 use crate::error::OdmError;
 use crate::gitignore::apply_managed_gitignore;
@@ -63,6 +63,13 @@ impl MembershipEntry {
         match self {
             MembershipEntry::Project(e) => e.branch.as_deref(),
             MembershipEntry::Progen(e) => e.branch.as_deref(),
+        }
+    }
+
+    fn checkout(&self) -> CheckoutMode {
+        match self {
+            MembershipEntry::Project(e) => e.checkout,
+            MembershipEntry::Progen(e) => e.checkout,
         }
     }
 }
@@ -121,6 +128,7 @@ pub fn membership_add<R: odm_git::CommandRunner>(
         path: entry.path().to_string(),
         url: url.to_string(),
         branch: entry.branch().map(|s| s.to_string()),
+        checkout: entry.checkout(),
     });
 
     match entry {

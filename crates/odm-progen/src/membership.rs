@@ -77,6 +77,7 @@ mod tests {
                 path: "vaults/desk".into(),
                 url: None,
                 branch: None,
+                ..Default::default()
             },
             false,
         )
@@ -109,6 +110,7 @@ mod tests {
                 path: "vaults/remote".into(),
                 url: Some("https://example.com/remote.git".into()),
                 branch: Some("main".into()),
+                ..Default::default()
             },
             true, // no_clone
         )
