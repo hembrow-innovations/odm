@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Website** — visitor HTML moved to [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web) (https://hembrow-innovations.github.io/odm-web/).
+
 ### Removed
 
 - **`odm agent` verb** — `agent pack`, `agent prompt`, and `agent start` removed entirely (CLI, library code, tests, docs, website, skills, examples). AI-agent harness integrations are no longer part of the product; `odm context` remains the note-context surface.

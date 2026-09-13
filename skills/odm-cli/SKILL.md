@@ -15,7 +15,7 @@ Agent operator guide for **`odm`** — poly-repo workspace OS for humans and AI
 agents. One config (`.odm/odm.config.yaml`), one binary, orchestrated
 **Projects** + **Progens** (no submodules, no MCP server).
 
-**Docs:** https://hembrow-innovations.github.io/odm/
+**Docs:** https://hembrow-innovations.github.io/odm-web/
 
 ## Agent defaults
 

@@ -93,7 +93,7 @@ Passthrough after spawn: `run`, `project git` may exit outside 0–4.
 Trust in this order:
 
 1. Live `odm <cmd> --help` and `--json` output
-2. https://hembrow-innovations.github.io/odm/
+2. https://hembrow-innovations.github.io/odm-web/
 3. This skill (may lag a release)
 
 ## Invented commands checklist

@@ -2,7 +2,7 @@
 
 How to get the `odm` binary. Product overview: root `README.md`. Version history: root `CHANGELOG.md`.
 
-Visitor-facing install guide (same steps): project site [`install.html`](https://hembrow-innovations.github.io/odm/install.html) (source: `website/install.html`).
+Visitor-facing install guide (same steps): project site [`install.html`](https://hembrow-innovations.github.io/odm-web/install.html) (source: [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web)).
 
 ## Requirements
 

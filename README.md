@@ -2,7 +2,7 @@
 
 Poly-repo workspace OS for humans and AI agents: one config, one CLI, and orchestrated Projects + Progens without submodules or a second brain product.
 
-**Website:** [hembrow-innovations.github.io/odm](https://hembrow-innovations.github.io/odm/) (source: [`website/`](website/) on `main`; Pages via GitHub Actions)
+**Website:** [hembrow-innovations.github.io/odm-web](https://hembrow-innovations.github.io/odm-web/) (source: [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web))
 
 **Status:** **v0.1.1** — multi-platform GitHub Releases + curl install; spine (multi-git, Progen, Actions) plus **worktree slots** (add/list/rm/prune; doctor orphan/dirty warns) and local **`odm generate`**.
 
@@ -100,8 +100,8 @@ ODM=target/debug/odm examples/todo/scripts/dogfood.sh
 
 ## Docs
 
-- **Website** (guides + quickstart): https://hembrow-innovations.github.io/odm/
-- **Install**: [docs/reference/install.md](docs/reference/install.md) · [site install](https://hembrow-innovations.github.io/odm/install.html)
+- **Website** (guides + quickstart): https://hembrow-innovations.github.io/odm-web/
+- **Install**: [docs/reference/install.md](docs/reference/install.md) · [site install](https://hembrow-innovations.github.io/odm-web/install.html)
 - **Vision**: [docs/reference/vision.md](docs/reference/vision.md)
 - **CLI**: [docs/reference/cli.md](docs/reference/cli.md)
 - **Architecture**: [docs/reference/architecture.md](docs/reference/architecture.md)
@@ -120,8 +120,6 @@ ODM=target/debug/odm examples/todo/scripts/dogfood.sh
 ```bash
 cargo test
 ```
-
-Website browser smoke tests (Playwright): see [`website/README.md`](website/README.md).
 
 ## Legacy Go
 
