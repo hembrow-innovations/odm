@@ -13,6 +13,14 @@ pub struct WorktreeEntry {
     pub branch: Option<String>,
 }
 
+/// Index fact for one gitlink path. Porcelain prefixes never leave this crate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitlinkRecord {
+    Missing,
+    Recorded { sha: String },
+    Conflict,
+}
+
 /// Shell-out git façade for ODM multi-git lifecycle.
 ///
 /// Paths must be absolute. Library ops use `git -C <path>`, capture stdio, and
@@ -357,6 +365,84 @@ impl<R: CommandRunner> Git<R> {
         Ok(())
     }
 
+    /// Index fact for `path` (repo-relative). Work tree occupancy is not a record.
+    pub fn gitlink_record(&self, repo: &Path, path: &Path) -> Result<GitlinkRecord, GitError> {
+        require_absolute(repo)?;
+        let args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "ls-files".into(),
+            "--stage".into(),
+            "--".into(),
+            path.into(),
+        ];
+        let out = self.capture("gitlink_record", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "gitlink_record",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        let stdout = out.stdout_str();
+        record_from_stage_rows(
+            parse_ls_files_stage(&stdout, "gitlink_record")?,
+            "gitlink_record",
+            &stdout,
+        )
+    }
+
+    /// Repo-relative paths with a `160000` index entry, including conflicts.
+    pub fn list_gitlinks(&self, repo: &Path) -> Result<Vec<PathBuf>, GitError> {
+        require_absolute(repo)?;
+        let args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "ls-files".into(),
+            "--stage".into(),
+        ];
+        let out = self.capture("list_gitlinks", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "list_gitlinks",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        Ok(gitlink_paths(parse_ls_files_stage(
+            &out.stdout_str(),
+            "list_gitlinks",
+        )?))
+    }
+
+    /// `git -C <repo> rm --cached -- <path>`. Does not commit. Leaves the work tree.
+    pub fn unstage_gitlink(&self, repo: &Path, path: &Path) -> Result<(), GitError> {
+        require_absolute(repo)?;
+        let args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "rm".into(),
+            "--cached".into(),
+            "--".into(),
+            path.into(),
+        ];
+        let out = self.capture("unstage_gitlink", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "unstage_gitlink",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        Ok(())
+    }
+
     fn capture(
         &self,
         operation: &'static str,
@@ -408,6 +494,93 @@ fn is_full_sha(s: &str) -> bool {
 fn looks_like_missing_origin(stderr: &str) -> bool {
     let lower = stderr.to_ascii_lowercase();
     lower.contains("no such remote") || lower.contains("not a remote")
+}
+
+struct StageRow {
+    mode: String,
+    sha: String,
+    stage: u32,
+    path: PathBuf,
+}
+
+fn parse_ls_files_stage(stdout: &str, operation: &'static str) -> Result<Vec<StageRow>, GitError> {
+    stdout
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| parse_ls_files_stage_line(line, operation, stdout))
+        .collect()
+}
+
+fn parse_ls_files_stage_line(
+    line: &str,
+    operation: &'static str,
+    raw: &str,
+) -> Result<StageRow, GitError> {
+    let parse_err = |detail: &str| GitError::Parse {
+        operation,
+        stdout: raw.to_string(),
+        detail: detail.into(),
+    };
+    let (meta, path) = line
+        .split_once('\t')
+        .ok_or_else(|| parse_err("ls-files --stage line missing tab"))?;
+    let mut bits = meta.split(' ');
+    let mode = bits
+        .next()
+        .ok_or_else(|| parse_err("ls-files --stage line missing mode"))?;
+    let sha = bits
+        .next()
+        .ok_or_else(|| parse_err("ls-files --stage line missing sha"))?;
+    let stage = bits
+        .next()
+        .ok_or_else(|| parse_err("ls-files --stage line missing stage"))?;
+    let stage: u32 = stage
+        .parse()
+        .map_err(|_| parse_err("ls-files --stage stage is not an integer"))?;
+    Ok(StageRow {
+        mode: mode.to_string(),
+        sha: sha.to_ascii_lowercase(),
+        stage,
+        path: PathBuf::from(path),
+    })
+}
+
+fn record_from_stage_rows(
+    rows: Vec<StageRow>,
+    operation: &'static str,
+    stdout: &str,
+) -> Result<GitlinkRecord, GitError> {
+    if rows.is_empty() {
+        return Ok(GitlinkRecord::Missing);
+    }
+    if rows.iter().any(|r| r.stage != 0) {
+        return Ok(GitlinkRecord::Conflict);
+    }
+    match rows.as_slice() {
+        [row] if row.mode == "160000" => {
+            if !is_full_sha(&row.sha) {
+                return Err(GitError::Parse {
+                    operation,
+                    stdout: stdout.to_string(),
+                    detail: "expected 40-char hex SHA".into(),
+                });
+            }
+            Ok(GitlinkRecord::Recorded {
+                sha: row.sha.clone(),
+            })
+        }
+        _ => Ok(GitlinkRecord::Missing),
+    }
+}
+
+fn gitlink_paths(rows: Vec<StageRow>) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for row in rows {
+        if row.mode == "160000" && !paths.contains(&row.path) {
+            paths.push(row.path);
+        }
+    }
+    paths
 }
 
 /// Parse `git worktree list --porcelain` stdout into entries (including main).
