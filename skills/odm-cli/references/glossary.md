@@ -14,9 +14,10 @@ _Avoid:_ monorepo root (when meaning the ODM-managed unit), installation, sandbo
 ## Project
 
 A named, config-declared path inside a Workspace, usually its own git checkout
-(plain clone). Only declared entries are Projects — not every subdirectory.
+(plain clone by default; opt-in gitlink per entry). Only declared entries are
+Projects — not every subdirectory.
 
-_Avoid:_ submodule, package (when meaning a managed repo), repo (as the ODM entity name)
+_Avoid:_ submodule (as the ODM entity name), package (when meaning a managed repo), repo (as the ODM entity name)
 
 ## Progen
 
@@ -63,14 +64,24 @@ Progens, Progen groups, action bundles, generator bundles.
 _Avoid:_ manifest (alone), settings, `odm.json` as the primary name,
 root-level `odm.config.yaml` (legacy)
 
+## Gitlink
+
+Opt-in membership for a managed Project or Progen (`checkout: gitlink`).
+Clones remain the default. Pin authority is the parent index SHA. The pin
+file does not list gitlink names. CLI: `--gitlink` on project and progen add.
+There is no `odm submodule` command.
+
+_Avoid:_ default membership, submodule (as the ODM entity name)
+
 ## Pin file
 
-Optional lock of resolved revisions for managed checkouts:
-`.odm/odm.lock.yaml`. Not layout truth. Created when the Workspace is a git
-repo and managed clones succeed; auto-maintained while present; **apply is
-explicit** (`odm pin apply`).
+Optional lock of resolved revisions for managed clone checkouts:
+`.odm/odm.lock.yaml`. Not layout truth. Gitlink names are not listed. Created
+when the Workspace is a git repo and managed clones succeed; auto-maintained
+while present; **record** is `odm pin record`; **apply is explicit**
+(`odm pin apply`).
 
-_Avoid:_ lockfile (unless paired with “Pin file”), submodule pins
+_Avoid:_ lockfile (unless paired with “Pin file”), listing gitlink names
 
 ## Action
 
@@ -86,5 +97,6 @@ run). Defined in Generator bundle files. Not an Action.
 
 ## Managed entry
 
-A Project or Progen with a `url` field — participates in clone/sync/pin.
-Path-only entries are declared layout only (no git lifecycle from ODM).
+A Project or Progen with a `url` field. Path-only entries are declared layout
+only (no git lifecycle from ODM). Absent `checkout` is a plain clone and
+participates in clone/sync/pin. `checkout: gitlink` is opt-in gitlink.

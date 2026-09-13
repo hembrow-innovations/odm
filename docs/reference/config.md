@@ -26,7 +26,7 @@ Missing Action or Generator maps means none are defined (not an error). A declar
 
 All entity collections are **maps keyed by name**, not arrays. Keys use **snake_case**. Project and Progen names are unique across both maps and must be path tokens (no `/`, `\`, `.`, or `..`) — same rules as worktree slot names.
 
-No top-level: layout templates, worktree slots, env profiles, submodule fields, inline Action/Generator bodies.
+No top-level: layout templates, worktree slots, env profiles, inline Action/Generator bodies. Gitlink is opt-in per entry via `checkout`, not a top-level submodule map.
 
 ## Project entry
 
@@ -37,10 +37,14 @@ projects:
     url: https://github.com/acme/api.git   # optional; when set, entry is git-managed
     branch: main                      # optional; clone checkout preference (not a pin)
     type: service                     # optional metadata string
+  nested:
+    path: vendor/nested
+    url: https://github.com/acme/nested.git
+    checkout: gitlink                 # optional; omit for plain clone (default)
 ```
 
-- **No** submodule fields.
-- Pinned revision is **not** a layout field (optional Pin file + pin apply).
+- **`checkout`**: optional. Default is a plain clone. `gitlink` is opt-in gitlink membership. No other submodule fields.
+- Pinned revision is **not** a layout field (optional Pin file + `odm pin record` / `odm pin apply`). Gitlink names are not listed in the pin file.
 - Parallel checkouts of the same remote = **separate entries** (different name/path/`branch`), not multiple trees under one name.
 
 ## Progen entry
@@ -53,11 +57,12 @@ progens:
     path: apps/api/docs
     url: https://github.com/acme/api-docs.git   # optional; when set, git-managed like a Project
     branch: main                      # optional
+    checkout: gitlink                 # optional; omit for plain clone (default)
 ```
 
 - Not a Project unless also listed under `projects`.
 - Index/cache locations are engine defaults, not config fields.
-- Git lifecycle for `url` entries matches Projects (`multi-git.md`).
+- Git lifecycle for `url` entries matches Projects (`multi-git.md`). Optional `checkout: gitlink` is opt-in gitlink, same as Project.
 
 ## Progen group
 
@@ -156,7 +161,7 @@ generators:
 - Worktree slot declarations
 - Env profiles
 - `odm.config.json` / root-level `odm.config.yaml` (legacy Go location)
-- Legacy Go `documentaton` / plugin / submodule fields
+- Legacy Go `documentaton` / plugin fields and a top-level submodule map
 - Full generator template package format and Nx shell integration details (`env-generators.md`; local generate v1 landed, remote/templating still deferred)
 
 ## Relationship to ODM state directory

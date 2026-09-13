@@ -9,8 +9,8 @@ The on-disk root a user works in (or points at with `--root`), containing ODM co
 _Avoid_: monorepo root (when meaning the ODM-managed unit), installation, sandbox
 
 **Project**:
-A named, config-declared path inside a Workspace, usually its own git checkout (plain clone). Only declared entries are Projects — not every subdirectory.
-_Avoid_: submodule, package (when meaning a managed repo), repo (as the ODM entity name)
+A named, config-declared path inside a Workspace, usually its own git checkout (plain clone by default; opt-in gitlink per entry). Only declared entries are Projects — not every subdirectory.
+_Avoid_: submodule (as the ODM entity name), package (when meaning a managed repo), repo (as the ODM entity name)
 
 **Progen**:
 A named docs/memory store (Markdown on disk plus a disposable index) that ODM orchestrates at a config-declared path. Not owned by `.odm/`. Often its own git repo so history is tracked; path may nest under a Project without merging the two entities. Not a Project unless also declared as one.
@@ -36,9 +36,13 @@ _Avoid_: branch (as the ODM entity), sandbox, clone (for this concept), workspac
 The sole layout source of truth for a Workspace (canonically `.odm/odm.config.yaml`): Projects, Progens, Progen groups, actions, and related declarations. Lives under the ODM state directory with other ODM config/state — not at Workspace root.
 _Avoid_: manifest (alone), settings, odm.json as the primary name, root `odm.config.yaml` (legacy Go)
 
+**Gitlink**:
+Opt-in membership for a managed Project or Progen (`checkout: gitlink`). Clones remain the default. Pin authority is the parent index SHA. The pin file does not list gitlink names.
+_Avoid_: default membership, submodule (as the ODM entity name)
+
 **Pin file**:
-An optional lock of resolved revisions for managed checkouts (canonically `.odm/odm.lock.yaml`). Not layout truth; created when the Workspace is a git repo and managed clones succeed; auto-maintained while present; apply is explicit.
-_Avoid_: lockfile (unless paired with Pin file), submodule pins
+An optional lock of resolved revisions for managed clone checkouts (canonically `.odm/odm.lock.yaml`). Not layout truth. Gitlink names are not listed. Record is `odm pin record`. Apply for clones is explicit detached HEAD.
+_Avoid_: lockfile (unless paired with Pin file), listing gitlink names
 
 **Action**:
 A named task the CLI can invoke — Nx-task-like, not a built-in ODM verb. Defined in Action bundle files pointed to from Workspace config.

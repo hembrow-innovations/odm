@@ -5,11 +5,12 @@
 ```bash
 odm progen list --json
 odm progen info <name> --json
-odm progen add <name> --path <rel> [--url <url>] [--branch <b>] [--no-clone]
+odm progen add <name> --path <rel> [--url <url>] [--branch <b>] [--gitlink] [--no-clone]
 odm progen rm <name> [--delete] [--force]
 ```
 
-Same add/rm/materialize semantics as Projects. Entity summary verb is **`info`**
+Same add/rm/materialize semantics as Projects. `--gitlink` sets `checkout: gitlink`
+(opt-in gitlink). Clones remain the default. Entity summary verb is **`info`**
 (not `get` — `get` is a note-by-id store verb).
 
 Path-only Progens are valid (local Markdown vaults with no remote).

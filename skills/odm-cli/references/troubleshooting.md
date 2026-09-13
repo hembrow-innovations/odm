@@ -101,6 +101,7 @@ Trust in this order:
 If you were about to run any of these, stop:
 
 - `odm serve` / MCP
+- `odm submodule` (opt-in gitlink is `--gitlink` / `checkout: gitlink`)
 - `odm project sync`
 - path-valued `--project ./apps/api`
 - top-level `odm <action-name>` instead of `odm run <action-name>`

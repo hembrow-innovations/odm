@@ -1,6 +1,6 @@
 # Vision
 
-ODM is a poly-repo workspace OS for humans and AI agents: one config, one CLI, and orchestrated Projects + Progens without submodules or a second brain product.
+ODM is a poly-repo workspace OS for humans and AI agents: one config, one CLI, and orchestrated Projects + Progens (clones by default, opt-in gitlink) without a second brain product.
 
 Domain terms: root `CONTEXT.md`. System shape: `architecture.md`.
 
@@ -16,14 +16,14 @@ Not an AI-first tool that humans can also use.
 
 ## Core jobs
 
-- **Many checkouts, one desk** — declare Projects and Progens in config; plain clones and pins; no submodule lifecycle.
+- **Many checkouts, one desk** — declare Projects and Progens in config; plain clones by default, opt-in gitlink, and pins.
 - **Memory is multi-store** — orchestrate several Progens (scope and federation) without pretending one vault is the world.
 - **Agents share the desk** — worktree slots so agent work lands in known places, not ad-hoc clones.
 - **One binary UX** — humans and agents do not learn a separate progen CLI or a plugin zoo.
 
 ## Instead of…
 
-- **Git submodules** — plain clones and an optional pin file; layout lives in Workspace config.
+- **Gitlink as the default desk**: clones remain default; gitlink is opt-in per entry (`checkout: gitlink`); layout lives in Workspace config.
 - **One mega-vault** — many Progens, ODM-scoped query; no cross-store wikilinks inside a store.
 - **Ad-hoc agent clones** — declared Projects and worktree slots on one desk.
 
@@ -33,7 +33,7 @@ Not an AI-first tool that humans can also use.
 - Not a git host, forge, or PR bot.
 - Not a second knowledge product — Progen is the store engine; ODM orchestrates.
 - No `serve` / MCP daemon in the v1 design package.
-- No submodule-based multi-repo model.
+- Gitlink as the default membership (clones remain default; gitlink is opt-in per entry).
 - The ODM product repository is not a consumer Workspace.
 
 ## Ownership (summary)

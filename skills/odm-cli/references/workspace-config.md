@@ -28,6 +28,10 @@ projects:
     url: https://github.com/acme/api.git   # optional → managed
     branch: main                    # optional clone preference (not a pin)
     type: service                   # optional metadata
+  nested:
+    path: vendor/nested
+    url: https://github.com/acme/nested.git
+    checkout: gitlink               # optional; omit for plain clone (default)
 
 progens:
   product:
@@ -59,13 +63,14 @@ generators:
 
 - `path` required (Primary checkout).
 - `url` optional → managed git lifecycle.
-- No submodule fields. Pin revision is **not** a layout field.
+- `checkout` optional. Default is a plain clone. `gitlink` is opt-in gitlink membership. No other submodule fields.
+- Pin revision is **not** a layout field. Gitlink names are not listed in the pin file.
 - Parallel checkouts of the same remote = **separate entries** (different name/path).
 
 ## Progen entry
 
 - `path` required (store root; may nest under a Project path).
-- Optional `url` / `branch` same as Project.
+- Optional `url` / `branch` / `checkout` same as Project.
 - Not a Project unless also listed under `projects`.
 - Indexes live under `.odm/progen/<name>/` (disposable; rebuild with `progen reindex`).
 
@@ -92,11 +97,13 @@ pins:
     branch: main   # optional metadata; rev is authority
 ```
 
-- Auto-created on first successful managed materialize **if** Workspace root is a git repo.
+- Auto-created on first successful managed clone materialize **if** Workspace root is a git repo.
 - Auto-maintained after successful clone/sync/git-on-Primary that moves HEAD.
-- Apply is **explicit**: `odm pin apply`.
+- Gitlink names are not listed. Pin authority for gitlink is the parent index SHA.
+- Record is **`odm pin record`**. Apply is **explicit**: `odm pin apply`.
 
 ## What config does not contain
 
 No top-level: layout templates, worktree slot declarations, env
-profiles, submodule fields, inline Action/Generator bodies.
+profiles, inline Action/Generator bodies. Gitlink is opt-in per entry via
+`checkout`, not a top-level submodule map.

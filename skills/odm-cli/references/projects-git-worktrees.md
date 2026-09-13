@@ -5,7 +5,7 @@
 ```bash
 odm project list --json
 odm project info <name> --json
-odm project add <name> --path <rel> [--url <url>] [--branch <b>] [--type <t>] [--no-clone]
+odm project add <name> --path <rel> [--url <url>] [--branch <b>] [--type <t>] [--gitlink] [--no-clone]
 odm project rm <name> [--delete] [--force]
 odm project git <name> [--wt <slot>] -- <git-args…>
 ```
@@ -13,7 +13,8 @@ odm project git <name> [--wt <slot>] -- <git-args…>
 ### add
 
 - Writes Project entry into Workspace config.
-- If `url` set: materializes (clone) unless `--no-clone`.
+- If `url` set and checkout is not gitlink: materializes (clone) unless `--no-clone`.
+- `--gitlink` sets `checkout: gitlink` (opt-in gitlink). Clones remain the default.
 - `path` is relative to Workspace root.
 - `--branch` is clone checkout preference only — **not** a pin.
 
@@ -49,15 +50,14 @@ odm sync api          # one entity
 
 ## Sync vs pin
 
-| Verb | Does |
-|------|------|
-| `odm sync [name…]` | Materialize missing managed trees + **fetch only**. Never checkout/reset/merge. |
-| `odm pin status` | Compare pin file SHAs vs current HEAD. |
-| `odm pin apply [--force]` | Checkout each pin `rev` as **detached HEAD**. Dirty needs `--force`. |
+- **`odm sync [name…]`**: materialize missing managed clones + **fetch only**. Never checkout/reset/merge.
+- **`odm pin record`**: named record verb. Clones: lock SHA. Gitlink: parent index SHA. The pin file does not list gitlink names.
+- **`odm pin status`**: compare pin file SHAs vs current HEAD for clones.
+- **`odm pin apply [--force]`**: checkout each clone pin `rev` as **detached HEAD**. Dirty needs `--force`. Gitlink names are not listed.
 
-`in_sync` means **SHA match only** — not “checked out on a branch.”
+`in_sync` means **SHA match only**, not “checked out on a branch.”
 
-Managed = has `url`. Path-only Projects skip git lifecycle.
+Managed = has `url`. Path-only Projects skip git lifecycle. Absent `checkout` is a plain clone. `checkout: gitlink` is opt-in gitlink.
 
 ## Worktree slots (v1)
 
