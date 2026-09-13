@@ -170,53 +170,98 @@ fn ws_project_and_progen(root: PathBuf) -> Workspace {
 }
 
 #[test]
+fn pin_source_classifies_checkout_mode() {
+    use crate::config::CheckoutMode;
+    assert_eq!(pin_source(false, CheckoutMode::Clone), PinSource::Unmanaged);
+    assert_eq!(
+        pin_source(false, CheckoutMode::Gitlink),
+        PinSource::Unmanaged
+    );
+    assert_eq!(pin_source(true, CheckoutMode::Clone), PinSource::LockFile);
+    assert_eq!(pin_source(true, CheckoutMode::Gitlink), PinSource::Gitlink);
+}
+
+#[test]
+fn pin_source_gitlink_never_missing_pin_file() {
+    let sha = "a".repeat(40);
+    assert_ne!(
+        compute_pin_state(PinSource::Gitlink, false, true, None, Some(&sha)),
+        PinState::MissingPinFile
+    );
+    assert_ne!(
+        compute_pin_state(PinSource::Gitlink, false, false, None, None),
+        PinState::MissingPinFile
+    );
+    assert_eq!(
+        compute_pin_state(PinSource::Gitlink, false, true, None, Some(&sha)),
+        PinState::Unpinned
+    );
+    assert_eq!(
+        compute_pin_state(PinSource::Gitlink, true, true, Some(&sha), Some(&sha)),
+        PinState::InSync
+    );
+    assert_eq!(
+        compute_pin_state(PinSource::Gitlink, false, true, Some(&sha), Some("b")),
+        PinState::Drift
+    );
+    assert_eq!(
+        compute_pin_state(PinSource::Gitlink, false, true, Some(&sha), None),
+        PinState::Drift
+    );
+    assert_eq!(
+        compute_pin_state(PinSource::Gitlink, false, false, Some(&sha), None),
+        PinState::MissingPath
+    );
+}
+
+#[test]
 fn pin_state_matrix() {
     // unmanaged
     assert_eq!(
-        compute_pin_state(false, false, true, None, None),
+        compute_pin_state(PinSource::Unmanaged, false, true, None, None),
         PinState::None
     );
     assert_eq!(
-        compute_pin_state(false, true, false, Some("a"), None),
+        compute_pin_state(PinSource::Unmanaged, true, false, Some("a"), None),
         PinState::None
     );
     // missing pin file
     assert_eq!(
-        compute_pin_state(true, false, true, None, Some("a")),
+        compute_pin_state(PinSource::LockFile, false, true, None, Some("a")),
         PinState::MissingPinFile
     );
     assert_eq!(
-        compute_pin_state(true, false, false, None, None),
+        compute_pin_state(PinSource::LockFile, false, false, None, None),
         PinState::MissingPinFile
     );
     // unpinned (pin present, no entry) — including path missing
     assert_eq!(
-        compute_pin_state(true, true, true, None, Some("a")),
+        compute_pin_state(PinSource::LockFile, true, true, None, Some("a")),
         PinState::Unpinned
     );
     assert_eq!(
-        compute_pin_state(true, true, false, None, None),
+        compute_pin_state(PinSource::LockFile, true, false, None, None),
         PinState::Unpinned
     );
     // missing path (pin entry, not on disk)
     assert_eq!(
-        compute_pin_state(true, true, false, Some("a"), None),
+        compute_pin_state(PinSource::LockFile, true, false, Some("a"), None),
         PinState::MissingPath
     );
     let sha = "a".repeat(40);
     // in_sync
     assert_eq!(
-        compute_pin_state(true, true, true, Some(&sha), Some(&sha)),
+        compute_pin_state(PinSource::LockFile, true, true, Some(&sha), Some(&sha)),
         PinState::InSync
     );
     // drift: head differs
     assert_eq!(
-        compute_pin_state(true, true, true, Some(&sha), Some("b")),
+        compute_pin_state(PinSource::LockFile, true, true, Some(&sha), Some("b")),
         PinState::Drift
     );
     // drift: on disk but not git / no head (former lifecycle "missing_path")
     assert_eq!(
-        compute_pin_state(true, true, true, Some(&sha), None),
+        compute_pin_state(PinSource::LockFile, true, true, Some(&sha), None),
         PinState::Drift
     );
     assert_eq!(PinState::InSync.as_str(), "in_sync");

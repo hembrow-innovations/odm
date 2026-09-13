@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **CheckoutMode** — optional `checkout: gitlink` on Project and Progen entries. Default clone is omitted from YAML. Load rejects gitlink without url and gitlink nested under another managed path.
+- **PinSource**: Unmanaged, LockFile, or Gitlink. Gitlink pin state compares recorded SHA to HEAD and never yields `missing_pin_file`. Workspace gitignore desired lines omit gitlink paths. `DirtyAction { Refuse, Force }` for dirty trees.
 
 ### Changed
 

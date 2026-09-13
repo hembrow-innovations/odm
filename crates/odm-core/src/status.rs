@@ -1,7 +1,7 @@
 use odm_git::Git;
 use serde::Serialize;
 
-use crate::config::Workspace;
+use crate::config::{CheckoutMode, Workspace};
 use crate::error::OdmError;
 use crate::inventory::observe_project_worktrees_soft;
 use crate::pin::load_pin;
@@ -33,6 +33,24 @@ pub struct EntityStatus {
     /// Orphan slot dirs for Projects only (`None` on Progens → omitted from JSON).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree_orphans: Option<Vec<WorktreeOrphanInfo>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinSource {
+    Unmanaged,
+    LockFile,
+    Gitlink,
+}
+
+/// Classify pin authority from membership and checkout mode.
+pub fn pin_source(managed: bool, checkout: CheckoutMode) -> PinSource {
+    if !managed {
+        PinSource::Unmanaged
+    } else if checkout == CheckoutMode::Gitlink {
+        PinSource::Gitlink
+    } else {
+        PinSource::LockFile
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -107,21 +125,24 @@ fn entity_status_from_obs(e: &crate::observation::EntityObservation) -> EntitySt
 
 /// Single source of truth for pin drift labels.
 ///
-/// Order: `!managed` → None; `!pin_present` → MissingPinFile; `pin_rev` none → Unpinned;
-/// `!on_disk` → MissingPath; head==pin_rev → InSync; else Drift.
+/// Unmanaged → None. LockFile: `!pin_present` → MissingPinFile. Gitlink never
+/// yields MissingPinFile. Then `pin_rev` none → Unpinned; `!on_disk` → MissingPath;
+/// head==pin_rev → InSync; else Drift.
 pub fn compute_pin_state(
-    managed: bool,
+    source: PinSource,
     pin_present: bool,
     on_disk: bool,
     pin_rev: Option<&str>,
     head: Option<&str>,
 ) -> PinState {
-    if !managed {
-        return PinState::None;
+    match source {
+        PinSource::Unmanaged => PinState::None,
+        PinSource::LockFile if !pin_present => PinState::MissingPinFile,
+        PinSource::LockFile | PinSource::Gitlink => sha_pin_state(on_disk, pin_rev, head),
     }
-    if !pin_present {
-        return PinState::MissingPinFile;
-    }
+}
+
+fn sha_pin_state(on_disk: bool, pin_rev: Option<&str>, head: Option<&str>) -> PinState {
     if pin_rev.is_none() {
         return PinState::Unpinned;
     }

@@ -9,6 +9,21 @@ use crate::config::WorkspaceConfig;
 use crate::error::OdmError;
 use crate::paths::abs_checkout;
 use crate::pin::{load_pin, prune_pins, save_pin, PinEntry, PinFile};
+use crate::status::{pin_source, PinSource};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirtyAction {
+    Refuse,
+    Force,
+}
+
+pub(crate) fn lockfile_pin_names(entities: &[ManagedEntity]) -> Vec<&str> {
+    entities
+        .iter()
+        .filter(|e| pin_source(true, e.checkout) == PinSource::LockFile)
+        .map(|e| e.name.as_str())
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinStatusReport {
@@ -47,7 +62,7 @@ pub fn maintain_pins_after<R: odm_git::CommandRunner>(
     }
 
     let managed = all_managed(config);
-    let managed_names: Vec<&str> = managed.iter().map(|e| e.name.as_str()).collect();
+    let managed_names = lockfile_pin_names(&managed);
 
     let mut pin = match load_pin(root)? {
         Some(p) => p,
@@ -62,6 +77,9 @@ pub fn maintain_pins_after<R: odm_git::CommandRunner>(
     prune_pins(&mut pin, &managed_names);
 
     for entity in entities {
+        if pin_source(true, entity.checkout) != PinSource::LockFile {
+            continue;
+        }
         let path = abs_checkout(root, &entity.path)?;
         if !path.exists() || !git.is_repo(&path)? {
             continue;
@@ -179,7 +197,12 @@ pub fn pin_apply<R: odm_git::CommandRunner>(
                 "path is not a git repo for '{name}': {rel}"
             )));
         }
-        if !force && !git.is_clean(&path)? {
+        let dirty = if force {
+            DirtyAction::Force
+        } else {
+            DirtyAction::Refuse
+        };
+        if dirty == DirtyAction::Refuse && !git.is_clean(&path)? {
             return Err(OdmError::operation(format!(
                 "working tree dirty for '{name}' (use --force)"
             )));
@@ -216,7 +239,7 @@ pub(crate) fn prune_pin_file_if_present(
 ) -> Result<(), OdmError> {
     if let Some(mut pin) = load_pin(root)? {
         let managed = all_managed(config);
-        let names: Vec<&str> = managed.iter().map(|e| e.name.as_str()).collect();
+        let names = lockfile_pin_names(&managed);
         prune_pins(&mut pin, &names);
         save_pin(root, &pin)?;
     }
@@ -226,7 +249,7 @@ pub(crate) fn prune_pin_file_if_present(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::checkout::sync_managed;
+    use crate::checkout::{sync_managed, ManagedEntity};
     use crate::config::{save_config, ProjectEntry, WorkspaceConfig};
     use crate::init::{init_workspace, InitOptions};
     use crate::pin::load_pin;
@@ -282,6 +305,31 @@ mod tests {
             .unwrap()
             .success());
         bare
+    }
+
+    #[test]
+    fn pin_source_lockfile_names_skip_gitlink() {
+        use crate::config::CheckoutMode;
+        let ents = vec![
+            ManagedEntity {
+                name: "clone".into(),
+                path: "a".into(),
+                url: "u".into(),
+                checkout: CheckoutMode::Clone,
+                ..Default::default()
+            },
+            ManagedEntity {
+                name: "link".into(),
+                path: "b".into(),
+                url: "u".into(),
+                checkout: CheckoutMode::Gitlink,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(lockfile_pin_names(&ents), vec!["clone"]);
+        let _ = DirtyAction::Refuse;
+        let _ = DirtyAction::Force;
+        assert_ne!(DirtyAction::Refuse, DirtyAction::Force);
     }
 
     #[test]

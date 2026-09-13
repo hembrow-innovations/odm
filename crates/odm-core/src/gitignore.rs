@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::config::WorkspaceConfig;
+use crate::config::{CheckoutMode, WorkspaceConfig};
 use crate::error::OdmError;
 use crate::io::atomic_write;
 
@@ -14,12 +14,12 @@ const EPHEMERAL: &[&str] = &[".odm/cache/", ".odm/log/", ".odm/progen/", "worktr
 pub fn desired_workspace_lines(config: &WorkspaceConfig) -> Vec<String> {
     let mut lines: Vec<String> = EPHEMERAL.iter().map(|s| (*s).to_string()).collect();
     for entry in config.projects.values() {
-        if entry.is_managed() {
+        if ignore_managed_path(entry.is_managed(), entry.checkout) {
             lines.push(with_trailing_slash(&entry.path));
         }
     }
     for entry in config.progens.values() {
-        if entry.is_managed() {
+        if ignore_managed_path(entry.is_managed(), entry.checkout) {
             lines.push(with_trailing_slash(&entry.path));
         }
     }
@@ -151,15 +151,19 @@ pub fn extract_managed_block(text: &str) -> Option<String> {
     Some(text[begin..end_incl].to_string())
 }
 
+fn ignore_managed_path(managed: bool, checkout: CheckoutMode) -> bool {
+    managed && checkout != CheckoutMode::Gitlink
+}
+
 fn managed_paths(config: &WorkspaceConfig) -> Vec<String> {
     let mut paths = Vec::new();
     for entry in config.projects.values() {
-        if entry.is_managed() {
+        if ignore_managed_path(entry.is_managed(), entry.checkout) {
             paths.push(normalize_rel(&entry.path));
         }
     }
     for entry in config.progens.values() {
-        if entry.is_managed() {
+        if ignore_managed_path(entry.is_managed(), entry.checkout) {
             paths.push(normalize_rel(&entry.path));
         }
     }
@@ -286,6 +290,49 @@ mod tests {
     use super::*;
     use crate::config::ProjectEntry;
     use tempfile::tempdir;
+
+    #[test]
+    fn gitignore_skips_gitlink() {
+        use crate::config::{CheckoutMode, ProgenEntry};
+        let mut cfg = WorkspaceConfig::default();
+        cfg.projects.insert(
+            "clone".into(),
+            ProjectEntry {
+                path: "projects/clone".into(),
+                url: Some("u".into()),
+                ..Default::default()
+            },
+        );
+        cfg.projects.insert(
+            "link".into(),
+            ProjectEntry {
+                path: "vendor/link".into(),
+                url: Some("u".into()),
+                checkout: CheckoutMode::Gitlink,
+                ..Default::default()
+            },
+        );
+        cfg.progens.insert(
+            "docs".into(),
+            ProgenEntry {
+                path: "vendor/docs".into(),
+                url: Some("u".into()),
+                checkout: CheckoutMode::Gitlink,
+                ..Default::default()
+            },
+        );
+        let lines = desired_workspace_lines(&cfg);
+        assert!(lines.contains(&"projects/clone/".into()), "{lines:?}");
+        assert!(
+            !lines.iter().any(|l| l.contains("vendor/link")),
+            "{lines:?}"
+        );
+        assert!(
+            !lines.iter().any(|l| l.contains("vendor/docs")),
+            "{lines:?}"
+        );
+        assert!(lines.contains(&".odm/cache/".into()), "{lines:?}");
+    }
 
     #[test]
     fn seed_ephemeral_and_managed() {

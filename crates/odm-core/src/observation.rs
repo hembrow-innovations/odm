@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 
 use odm_git::Git;
 
-use crate::config::WorkspaceConfig;
+use crate::config::{CheckoutMode, WorkspaceConfig};
 use crate::error::OdmError;
 use crate::paths::resolve_under_root;
 use crate::pin::PinFile;
-use crate::status::{compute_pin_state, PinState};
+use crate::status::{compute_pin_state, pin_source, PinState};
 
 /// Full Workspace observation snapshot (projects + progens).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +66,7 @@ pub fn observe_workspace<R: odm_git::CommandRunner>(
             &entry.path,
             entry.url.as_deref(),
             entry.is_managed(),
+            entry.checkout,
             pin,
         )?);
     }
@@ -78,6 +79,7 @@ pub fn observe_workspace<R: odm_git::CommandRunner>(
             &entry.path,
             entry.url.as_deref(),
             entry.is_managed(),
+            entry.checkout,
             pin,
         )?);
     }
@@ -97,6 +99,7 @@ pub fn observe_entity<R: odm_git::CommandRunner>(
     rel_path: &str,
     url: Option<&str>,
     managed: bool,
+    checkout: CheckoutMode,
     pin: Option<&PinFile>,
 ) -> Result<EntityObservation, OdmError> {
     let pin_present = pin.is_some();
@@ -129,7 +132,7 @@ pub fn observe_entity<R: odm_git::CommandRunner>(
         };
 
     let pin_state = compute_pin_state(
-        managed,
+        pin_source(managed, checkout),
         pin_present,
         on_disk,
         pin_rev.as_deref(),
@@ -162,6 +165,33 @@ mod tests {
     use crate::status::PinState;
     use odm_git::Git;
     use tempfile::tempdir;
+
+    #[test]
+    fn pin_source_gitlink_observe_skips_missing_pin_file() {
+        let dir = tempdir().unwrap();
+        init_workspace(InitOptions {
+            path: dir.path().to_path_buf(),
+            no_git: true,
+            name: None,
+        })
+        .unwrap();
+        let mut cfg = WorkspaceConfig::default();
+        cfg.projects.insert(
+            "link".into(),
+            ProjectEntry {
+                path: "vendor/link".into(),
+                url: Some("https://example.com/l.git".into()),
+                checkout: crate::config::CheckoutMode::Gitlink,
+                ..Default::default()
+            },
+        );
+        save_config(dir.path(), &cfg).unwrap();
+        let git = Git::new();
+        let obs = observe_workspace(&git, dir.path(), &cfg, None).unwrap();
+        let link = obs.find("link").unwrap();
+        assert_ne!(link.pin_state, PinState::MissingPinFile);
+        assert_eq!(link.pin_state, PinState::Unpinned);
+    }
 
     #[test]
     fn observe_attaches_pin_state_via_classifier() {
