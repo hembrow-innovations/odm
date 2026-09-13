@@ -443,6 +443,94 @@ impl<R: CommandRunner> Git<R> {
         Ok(())
     }
 
+    /// `git -C <repo> submodule add [-b <branch>] -- <url> <path>`.
+    /// Does not pass recurse or remote. Does not commit.
+    pub fn submodule_add(
+        &self,
+        repo: &Path,
+        url: &str,
+        path: &Path,
+        branch: Option<&str>,
+    ) -> Result<(), GitError> {
+        require_absolute(repo)?;
+        let mut args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "submodule".into(),
+            "add".into(),
+        ];
+        if let Some(b) = branch {
+            args.push("-b".into());
+            args.push(b.into());
+        }
+        args.push("--".into());
+        args.push(url.into());
+        args.push(path.into());
+        let out = self.capture("submodule_add", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "submodule_add",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// `git -C <repo> submodule update --init -- <path>`.
+    /// Path-limited. Does not pass remote or recursive. Does not commit.
+    pub fn submodule_update_init(&self, repo: &Path, path: &Path) -> Result<(), GitError> {
+        require_absolute(repo)?;
+        let args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "submodule".into(),
+            "update".into(),
+            "--init".into(),
+            "--".into(),
+            path.into(),
+        ];
+        let out = self.capture("submodule_update_init", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "submodule_update_init",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// `git -C <repo> update-index --add --cacheinfo 160000,<rev>,<path>`.
+    /// Does not commit. Does not use `git add`.
+    pub fn update_gitlink(&self, repo: &Path, path: &Path, rev: &str) -> Result<(), GitError> {
+        require_absolute(repo)?;
+        let spec = format!("160000,{rev},{}", path.display());
+        let args: Vec<OsString> = vec![
+            "-C".into(),
+            repo.into(),
+            "update-index".into(),
+            "--add".into(),
+            "--cacheinfo".into(),
+            spec.into(),
+        ];
+        let out = self.capture("update_gitlink", Some(repo), &args)?;
+        if !out.status.success() {
+            return Err(GitError::failed(
+                "update_gitlink",
+                Some(repo.to_path_buf()),
+                out.status,
+                out.stderr_str(),
+                out.stdout_str(),
+            ));
+        }
+        Ok(())
+    }
+
     fn capture(
         &self,
         operation: &'static str,
