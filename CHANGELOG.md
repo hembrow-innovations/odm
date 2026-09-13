@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gitlink sync and status** — `odm sync` on a gitlink name materializes if needed then fetches in the child. Child HEAD and parent gitlink SHA stay put. The lock file is not written for that name. `odm status --json` `in_sync` compares gitlink recorded SHA to child HEAD. Dirty is a separate field. `project git` auto-maintain skips gitlink.
 - **Gitlink doctor** — `odm doctor` fails `gitlink_extra`, `gitlink_missing`, `gitlink_conflict`, `checkout_mismatch`, and `gitmodules_layout`. `--fix` rewrites `.gitmodules` and gitignore from config. It does not rewrite remotes, pin apply, or import extra gitlinks as projects.
 - **Gitlink pin record** — `odm pin record [names] [--force]` stages child HEAD as the parent gitlink. Dirty refuses unless `--force`. Named clone is usage. Empty names means all gitlink-managed entries. Does not commit the workspace root. The pin file does not list gitlink names.
+- **Gitlink pin apply** — `odm pin apply` on a gitlink name checks out the recorded index SHA as detached HEAD. Dirty refuses unless `--force`. Missing gitlink is not_found. Does not fetch or stage. Clone apply still uses the lock file. Mixed names use each name's PinSource.
 
 ### Changed
 

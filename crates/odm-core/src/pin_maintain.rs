@@ -138,9 +138,9 @@ pub fn pin_status<R: odm_git::CommandRunner>(
 
     let mut entries = Vec::new();
     for entity in entities {
-        let row = obs.find(&entity.name).ok_or_else(|| {
-            OdmError::usage(format!("unknown entity '{}'", entity.name))
-        })?;
+        let row = obs
+            .find(&entity.name)
+            .ok_or_else(|| OdmError::usage(format!("unknown entity '{}'", entity.name)))?;
         entries.push(PinStatusEntry {
             name: entity.name,
             pin_rev: row.pin_rev.clone(),
@@ -236,6 +236,7 @@ pub fn pin_record<R: odm_git::CommandRunner>(
 }
 
 /// Apply pins (detached HEAD). Dirty → fail unless force. Missing path → NotFound.
+/// Gitlink names use the parent index SHA. Clone names use the lock file.
 pub fn pin_apply<R: odm_git::CommandRunner>(
     git: &Git<R>,
     root: &Path,
@@ -243,67 +244,170 @@ pub fn pin_apply<R: odm_git::CommandRunner>(
     names: &[String],
     force: bool,
 ) -> Result<Vec<PinApplyResult>, OdmError> {
-    let pin = load_pin(root)?.ok_or_else(|| {
-        OdmError::not_found("pin file not found: .odm/odm.lock.yaml")
-    })?;
-
-    let targets: Vec<(String, PinEntry, String)> = if names.is_empty() {
-        let mut v = Vec::new();
-        for (name, entry) in &pin.pins {
-            let path = find_managed_path(config, name).ok_or_else(|| {
-                OdmError::usage(format!(
-                    "pin '{name}' has no managed config entry"
-                ))
-            })?;
-            v.push((name.clone(), entry.clone(), path));
-        }
-        v
+    let pin = load_pin(root)?;
+    let dirty = if force {
+        DirtyAction::Force
     } else {
-        let mut v = Vec::new();
-        for name in names {
-            let entry = pin.pins.get(name).ok_or_else(|| {
-                OdmError::not_found(format!("no pin for '{name}'"))
-            })?;
-            let path = find_managed_path(config, name).ok_or_else(|| {
-                OdmError::usage(format!("unknown or unmanaged entity '{name}'"))
-            })?;
-            v.push((name.clone(), entry.clone(), path));
-        }
-        v
+        DirtyAction::Refuse
     };
 
+    if names.is_empty() {
+        let mut results = Vec::new();
+        match pin.as_ref() {
+            Some(p) => {
+                for (name, entry) in &p.pins {
+                    if let Some(entity) = find_managed_entity(config, name) {
+                        if pin_source(true, entity.checkout) != PinSource::LockFile {
+                            continue;
+                        }
+                    }
+                    let rel = find_managed_path(config, name).ok_or_else(|| {
+                        OdmError::usage(format!("pin '{name}' has no managed config entry"))
+                    })?;
+                    checkout_detached_at(git, root, name, &rel, &entry.rev, dirty, &mut results)?;
+                }
+            }
+            None => {
+                if !all_managed(config)
+                    .iter()
+                    .any(|e| pin_source(true, e.checkout) == PinSource::Gitlink)
+                {
+                    return Err(OdmError::not_found(
+                        "pin file not found: .odm/odm.lock.yaml",
+                    ));
+                }
+            }
+        }
+        for entity in all_managed(config) {
+            if pin_source(true, entity.checkout) == PinSource::Gitlink {
+                apply_gitlink(git, root, &entity, dirty, &mut results)?;
+            }
+        }
+        return Ok(results);
+    }
+
     let mut results = Vec::new();
-    for (name, entry, rel) in targets {
-        let path = abs_checkout(root, &rel)?;
-        if !path.exists() {
-            return Err(OdmError::not_found(format!(
-                "path missing for '{name}': {rel}"
-            )));
-        }
-        if !git.is_repo(&path)? {
-            return Err(OdmError::not_found(format!(
-                "path is not a git repo for '{name}': {rel}"
-            )));
-        }
-        let dirty = if force {
-            DirtyAction::Force
+    for name in names {
+        if let Some(entity) = find_managed_entity(config, name) {
+            match pin_source(true, entity.checkout) {
+                PinSource::Gitlink => {
+                    apply_gitlink(git, root, &entity, dirty, &mut results)?;
+                }
+                PinSource::LockFile => {
+                    apply_lockfile(
+                        git,
+                        root,
+                        pin.as_ref(),
+                        name,
+                        &entity.path,
+                        dirty,
+                        &mut results,
+                    )?;
+                }
+                PinSource::Unmanaged => {
+                    return Err(OdmError::usage(format!(
+                        "unknown or unmanaged entity '{name}'"
+                    )));
+                }
+            }
         } else {
-            DirtyAction::Refuse
-        };
-        if dirty == DirtyAction::Refuse && !git.is_clean(&path)? {
-            return Err(OdmError::operation(format!(
-                "working tree dirty for '{name}' (use --force)"
-            )));
+            let p = pin
+                .as_ref()
+                .ok_or_else(|| OdmError::not_found("pin file not found: .odm/odm.lock.yaml"))?;
+            let entry = p
+                .pins
+                .get(name)
+                .ok_or_else(|| OdmError::not_found(format!("no pin for '{name}'")))?;
+            let rel = find_managed_path(config, name)
+                .ok_or_else(|| OdmError::usage(format!("unknown or unmanaged entity '{name}'")))?;
+            checkout_detached_at(git, root, name, &rel, &entry.rev, dirty, &mut results)?;
         }
-        git.checkout_detached(&path, &entry.rev)?;
-        results.push(PinApplyResult {
-            name,
-            status: "applied".into(),
-            rev: Some(entry.rev.clone()),
-            detached: true,
-        });
     }
     Ok(results)
+}
+
+fn find_managed_entity(config: &WorkspaceConfig, name: &str) -> Option<ManagedEntity> {
+    resolve_managed(config, &[name.to_string()])
+        .ok()?
+        .into_iter()
+        .next()
+}
+
+fn apply_lockfile<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    root: &Path,
+    pin: Option<&PinFile>,
+    name: &str,
+    rel: &str,
+    dirty: DirtyAction,
+    results: &mut Vec<PinApplyResult>,
+) -> Result<(), OdmError> {
+    let pin = pin.ok_or_else(|| OdmError::not_found("pin file not found: .odm/odm.lock.yaml"))?;
+    let entry = pin
+        .pins
+        .get(name)
+        .ok_or_else(|| OdmError::not_found(format!("no pin for '{name}'")))?;
+    checkout_detached_at(git, root, name, rel, &entry.rev, dirty, results)
+}
+
+fn apply_gitlink<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    root: &Path,
+    entity: &ManagedEntity,
+    dirty: DirtyAction,
+    results: &mut Vec<PinApplyResult>,
+) -> Result<(), OdmError> {
+    let rev = match git.gitlink_record(root, Path::new(&entity.path))? {
+        GitlinkRecord::Recorded { sha } => sha,
+        GitlinkRecord::Missing => {
+            return Err(OdmError::not_found(format!(
+                "gitlink missing for '{}'",
+                entity.name
+            )));
+        }
+        GitlinkRecord::Conflict => {
+            return Err(OdmError::operation(format!(
+                "gitlink index is in conflict for '{}'",
+                entity.name
+            )));
+        }
+    };
+    checkout_detached_at(git, root, &entity.name, &entity.path, &rev, dirty, results)
+}
+
+fn checkout_detached_at<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    root: &Path,
+    name: &str,
+    rel: &str,
+    rev: &str,
+    dirty: DirtyAction,
+    results: &mut Vec<PinApplyResult>,
+) -> Result<(), OdmError> {
+    let path = abs_checkout(root, rel)?;
+    if !path.exists() {
+        return Err(OdmError::not_found(format!(
+            "path missing for '{name}': {rel}"
+        )));
+    }
+    if !git.is_repo_root(&path)? {
+        return Err(OdmError::not_found(format!(
+            "path is not a git repo for '{name}': {rel}"
+        )));
+    }
+    if dirty == DirtyAction::Refuse && !git.is_clean(&path)? {
+        return Err(OdmError::operation(format!(
+            "working tree dirty for '{name}' (use --force)"
+        )));
+    }
+    git.checkout_detached(&path, rev)?;
+    results.push(PinApplyResult {
+        name: name.to_string(),
+        status: "applied".into(),
+        rev: Some(rev.to_string()),
+        detached: true,
+    });
+    Ok(())
 }
 
 fn find_managed_path(config: &WorkspaceConfig, name: &str) -> Option<String> {
@@ -340,9 +444,9 @@ mod tests {
     use crate::checkout::{sync_managed, ManagedEntity};
     use crate::config::{save_config, ProjectEntry, WorkspaceConfig};
     use crate::error::OdmError;
-    use odm_git::Git;
     use crate::init::{init_workspace, InitOptions};
     use crate::pin::load_pin;
+    use odm_git::Git;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -350,7 +454,13 @@ mod tests {
 
     fn git_user(repo: &Path) {
         Command::new("git")
-            .args(["-C", repo.to_str().unwrap(), "config", "user.email", "t@est"])
+            .args([
+                "-C",
+                repo.to_str().unwrap(),
+                "config",
+                "user.email",
+                "t@est",
+            ])
             .status()
             .unwrap();
         Command::new("git")
