@@ -2,13 +2,15 @@
 
 use odm_core::{
     build_status, load_pin, observe_project_worktrees_soft, observe_workspace, path_buf_to_rel,
-    project_add, project_git, project_rm, EntityObservation, OdmError, PinState, ProjectEntry,
-    StatusSnapshot, Workspace, WorktreeOrphanInfo, WorktreeSlotInfo,
+    project_add, project_git, project_rm, CheckoutMode, EntityObservation, OdmError, PinState,
+    ProjectEntry, StatusSnapshot, Workspace, WorktreeOrphanInfo, WorktreeSlotInfo,
 };
 use odm_git::Git;
 use serde::Serialize;
 
-use crate::commands::materialize::{format_project_add_human, materialize_json_opt};
+use crate::commands::materialize::{
+    format_project_add_human, materialize_add_json, unstage_and_rewrite_gitlink,
+};
 use crate::ctx::Ctx;
 use crate::present::{json_value, NamedMaterialize, NamedOk, Present, Ready};
 
@@ -96,11 +98,7 @@ pub fn project_info_from(
         on_disk: obs.on_disk,
         is_git: obs.is_git,
         head: obs.head.clone(),
-        origin: if obs.is_git {
-            obs.origin.clone()
-        } else {
-            None
-        },
+        origin: if obs.is_git { obs.origin.clone() } else { None },
         dirty: obs.dirty,
         pin_rev: obs.pin_rev.clone(),
         pin_state: obs.pin_state,
@@ -205,6 +203,7 @@ pub fn add_cmd(
     branch: Option<String>,
     type_: Option<String>,
     no_clone: bool,
+    gitlink: bool,
 ) -> Result<Ready<NamedMaterialize>, OdmError> {
     let rel = path_buf_to_rel(path)?;
     let entry = ProjectEntry {
@@ -212,7 +211,11 @@ pub fn add_cmd(
         url,
         branch,
         type_,
-        ..Default::default()
+        checkout: if gitlink {
+            CheckoutMode::Gitlink
+        } else {
+            CheckoutMode::Clone
+        },
     };
     let outcome = project_add(
         &ctx.git,
@@ -222,7 +225,7 @@ pub fn add_cmd(
         entry,
         no_clone,
     )?;
-    let dto = NamedMaterialize::new(name, materialize_json_opt(outcome));
+    let dto = NamedMaterialize::new(name, materialize_add_json(outcome, gitlink));
     Ok(Ready::ok(dto, format_project_add_human(name, outcome)))
 }
 
@@ -233,6 +236,12 @@ pub fn rm_cmd(
     delete: bool,
     force: bool,
 ) -> Result<Ready<NamedOk>, OdmError> {
+    let gitlink_path = ctx
+        .ws
+        .config
+        .projects
+        .get(name)
+        .and_then(|e| (e.checkout == CheckoutMode::Gitlink).then(|| e.path.clone()));
     project_rm(
         &ctx.git,
         &ctx.ws.root,
@@ -241,6 +250,9 @@ pub fn rm_cmd(
         delete,
         force,
     )?;
+    if let Some(rel) = gitlink_path {
+        unstage_and_rewrite_gitlink(&ctx.git, &ctx.ws.root, &ctx.ws.config, &rel)?;
+    }
     Ok(Ready::ok(
         NamedOk::new(name),
         format!("removed project {name}"),
@@ -294,7 +306,11 @@ pub fn format_project_info_human(dto: &ProjectInfoDto) -> String {
         out.push_str(&format!("worktrees: {}\n", names.join(", ")));
     }
     if !dto.worktree_orphans.is_empty() {
-        let names: Vec<&str> = dto.worktree_orphans.iter().map(|o| o.name.as_str()).collect();
+        let names: Vec<&str> = dto
+            .worktree_orphans
+            .iter()
+            .map(|o| o.name.as_str())
+            .collect();
         out.push_str(&format!("orphans: {}\n", names.join(", ")));
     }
     out
@@ -307,8 +323,7 @@ mod tests {
     use std::path::PathBuf;
 
     use odm_core::{
-        EntityStatus, PinState, ProjectEntry, WorkspaceConfig, WorktreeOrphanInfo,
-        WorktreeSlotInfo,
+        EntityStatus, PinState, ProjectEntry, WorkspaceConfig, WorktreeOrphanInfo, WorktreeSlotInfo,
     };
 
     fn ws_one(name: &str, path: &str) -> Workspace {
@@ -380,8 +395,16 @@ mod tests {
         let snap = snap_one("alpha", "projects/alpha");
         let dto = project_list_from(&ws, &snap);
         let human = format_project_list_human(&dto);
-        assert!(human.contains("alpha\tprojects/alpha\tmanaged\ton_disk=true\tis_git=true\tpin=missing_pin_file\n"), "{human}");
-        assert_eq!(format_project_list_human(&ProjectListDto { projects: vec![] }), "(no projects)\n");
+        assert!(
+            human.contains(
+                "alpha\tprojects/alpha\tmanaged\ton_disk=true\tis_git=true\tpin=missing_pin_file\n"
+            ),
+            "{human}"
+        );
+        assert_eq!(
+            format_project_list_human(&ProjectListDto { projects: vec![] }),
+            "(no projects)\n"
+        );
     }
 
     #[test]

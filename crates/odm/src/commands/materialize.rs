@@ -1,11 +1,14 @@
-//! Shared MaterializeOutcome → string labels (JSON vs human sync differ).
+//! Shared MaterializeOutcome labels plus gitlink add/rm CLI helpers.
 
-use odm_core::MaterializeOutcome;
+use std::path::Path;
 
-/// Locked JSON label for a materialize outcome (`cloned` | `already_present`).
+use odm_core::{rewrite_gitmodules, MaterializeOutcome, OdmError, WorkspaceConfig};
+use odm_git::{Git, GitlinkRecord};
+
+/// Locked JSON label for a materialize outcome (`cloned` | `already_present` | `gitlink_added`).
 pub type MaterializeLabel = &'static str;
 
-/// JSON contract: `cloned` | `already_present`.
+/// JSON contract: `cloned` | `already_present` (add gitlink uses `materialize_add_json`).
 pub fn materialize_json(outcome: MaterializeOutcome) -> MaterializeLabel {
     match outcome {
         MaterializeOutcome::Cloned => "cloned",
@@ -16,6 +19,33 @@ pub fn materialize_json(outcome: MaterializeOutcome) -> MaterializeLabel {
 /// Optional JSON materialize field (project/progen add with `--no-clone` → null).
 pub fn materialize_json_opt(outcome: Option<MaterializeOutcome>) -> Option<MaterializeLabel> {
     outcome.map(materialize_json)
+}
+
+/// Add JSON: gitlink materialize that ran submodule add is `gitlink_added`.
+pub fn materialize_add_json(
+    outcome: Option<MaterializeOutcome>,
+    gitlink: bool,
+) -> Option<MaterializeLabel> {
+    match (outcome, gitlink) {
+        (Some(MaterializeOutcome::Cloned), true) => Some("gitlink_added"),
+        (o, _) => materialize_json_opt(o),
+    }
+}
+
+/// After rm undeclares a gitlink: unstage the index entry, rewrite `.gitmodules`. Does not commit.
+pub fn unstage_and_rewrite_gitlink<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    root: &Path,
+    config: &WorkspaceConfig,
+    rel: &str,
+) -> Result<(), OdmError> {
+    if git.is_repo_root(root).unwrap_or(false) {
+        let path = Path::new(rel);
+        if git.gitlink_record(root, path)? != GitlinkRecord::Missing {
+            git.unstage_gitlink(root, path)?;
+        }
+    }
+    rewrite_gitmodules(root, config)
 }
 
 /// Human sync table cell: `cloned` | `present` (not the JSON `already_present`).
@@ -68,6 +98,18 @@ mod tests {
             Some("cloned")
         );
         assert_eq!(materialize_json_opt(None), None);
+        assert_eq!(
+            materialize_add_json(Some(MaterializeOutcome::Cloned), true),
+            Some("gitlink_added")
+        );
+        assert_eq!(
+            materialize_add_json(Some(MaterializeOutcome::AlreadyPresent), true),
+            Some("already_present")
+        );
+        assert_eq!(
+            materialize_add_json(Some(MaterializeOutcome::Cloned), false),
+            Some("cloned")
+        );
     }
 
     #[test]

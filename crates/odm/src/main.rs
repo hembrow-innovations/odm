@@ -7,9 +7,9 @@ use odm::cli::{
 };
 use odm::commands::{
     backlinks_cmd, body_cmd, context_cmd, doctor_cmd, find_cmd, finish_run, generate_cmd, get_cmd,
-    init_cmd, ls_cmd, pin_apply_cmd, pin_status_cmd, project_add_cmd, project_git_cmd,
-    project_info_cmd, project_list_cmd, project_rm_cmd, progen_add_cmd, progen_doctor_cmd,
-    progen_info_cmd, progen_list_cmd, progen_rm_cmd, reindex_cmd, run_cmd, status_cmd, sync_cmd,
+    init_cmd, ls_cmd, pin_apply_cmd, pin_status_cmd, progen_add_cmd, progen_doctor_cmd,
+    progen_info_cmd, progen_list_cmd, progen_rm_cmd, project_add_cmd, project_git_cmd,
+    project_info_cmd, project_list_cmd, project_rm_cmd, reindex_cmd, run_cmd, status_cmd, sync_cmd,
     tree_cmd, worktree_add_cmd, worktree_list_cmd, worktree_prune_cmd, worktree_rm_cmd,
 };
 use odm::ctx::Ctx;
@@ -96,9 +96,10 @@ fn dispatch(ctx: &mut Ctx, out: &GlobalOut, cmd: Commands) -> Result<i32, OdmErr
                 branch,
                 type_,
                 no_clone,
+                gitlink,
             } => finish(
                 out,
-                &project_add_cmd(ctx, &name, &path, url, branch, type_, no_clone)?,
+                &project_add_cmd(ctx, &name, &path, url, branch, type_, no_clone, gitlink)?,
             ),
             ProjectCmd::Rm {
                 name,
@@ -142,9 +143,10 @@ fn dispatch(ctx: &mut Ctx, out: &GlobalOut, cmd: Commands) -> Result<i32, OdmErr
                 url,
                 branch,
                 no_clone,
+                gitlink,
             } => finish(
                 out,
-                &progen_add_cmd(ctx, &name, &path, url, branch, no_clone)?,
+                &progen_add_cmd(ctx, &name, &path, url, branch, no_clone, gitlink)?,
             ),
             ProgenCmd::Rm {
                 name,

@@ -15,7 +15,13 @@ fn odm() -> assert_cmd::Command {
 
 fn git_user(repo: &Path) {
     assert!(Command::new("git")
-        .args(["-C", repo.to_str().unwrap(), "config", "user.email", "t@est"])
+        .args([
+            "-C",
+            repo.to_str().unwrap(),
+            "config",
+            "user.email",
+            "t@est"
+        ])
         .status()
         .unwrap()
         .success());
@@ -143,9 +149,7 @@ fn pin_status_named_subset() {
     let (_dir, root) = ws_with_project();
     let root_s = root.to_str().unwrap();
 
-    let pin = json_stdout(
-        odm().args(["--root", root_s, "--json", "pin", "status", "alpha"]),
-    );
+    let pin = json_stdout(odm().args(["--root", root_s, "--json", "pin", "status", "alpha"]));
     let entries = pin["entries"].as_array().expect("entries");
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0]["name"], "alpha");
@@ -261,13 +265,7 @@ fn project_rm_delete_dirty_needs_force() {
 
     odm()
         .args([
-            "--root",
-            root_s,
-            "project",
-            "rm",
-            "alpha",
-            "--delete",
-            "--force",
+            "--root", root_s, "project", "rm", "alpha", "--delete", "--force",
         ])
         .assert()
         .success();
@@ -288,7 +286,15 @@ fn progen_rm_undeclares_without_delete() {
     let root_s = root.to_str().unwrap();
 
     odm()
-        .args(["--root", root_s, "progen", "add", "desk", "--path", "vaults/desk"])
+        .args([
+            "--root",
+            root_s,
+            "progen",
+            "add",
+            "desk",
+            "--path",
+            "vaults/desk",
+        ])
         .assert()
         .success();
     let vault = root.join("vaults/desk");
@@ -319,7 +325,15 @@ fn progen_rm_delete_removes_clean_path() {
     let root_s = root.to_str().unwrap();
 
     odm()
-        .args(["--root", root_s, "progen", "add", "desk", "--path", "vaults/desk"])
+        .args([
+            "--root",
+            root_s,
+            "progen",
+            "add",
+            "desk",
+            "--path",
+            "vaults/desk",
+        ])
         .assert()
         .success();
     let vault = root.join("vaults/desk");
@@ -354,4 +368,220 @@ fn progen_rm_unknown_exits_1() {
         .failure()
         .code(1)
         .stderr(predicate::str::contains("unknown progen"));
+}
+
+// ── gitlink add / rm (odm.git:gitlink-opt-in, odm.git:managed-url, odm.git:rm-keep, odm.git:gitlink-pin-index) ──
+
+fn odm_file_protocol() -> assert_cmd::Command {
+    let mut c = odm();
+    c.env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "protocol.file.allow")
+        .env("GIT_CONFIG_VALUE_0", "always");
+    c
+}
+
+fn commit_workspace(root: &Path) {
+    git_user(root);
+    fs::write(root.join("README"), "ws").unwrap();
+    assert!(Command::new("git")
+        .args(["-C", root.to_str().unwrap(), "add", "README"])
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("git")
+        .args(["-C", root.to_str().unwrap(), "commit", "-m", "init"])
+        .status()
+        .unwrap()
+        .success());
+}
+
+fn head_sha(repo: &Path) -> String {
+    let out = Command::new("git")
+        .args(["-C", repo.to_str().unwrap(), "rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+fn stage_row(repo: &Path, rel: &str) -> String {
+    let out = Command::new("git")
+        .args([
+            "-C",
+            repo.to_str().unwrap(),
+            "ls-files",
+            "--stage",
+            "--",
+            rel,
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap()
+}
+
+fn ws_git_committed() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    odm()
+        .args(["init", root.to_str().unwrap()])
+        .assert()
+        .success();
+    commit_workspace(&root);
+    (dir, root)
+}
+
+/// `odm.git:gitlink-opt-in` `odm.git:gitlink-pin-index` `odm.cli:json`
+#[test]
+fn gitlink_add() {
+    let (dir, root) = ws_git_committed();
+    let bare = bare_with_main(dir.path(), "nested");
+    let root_s = root.to_str().unwrap();
+
+    let v = json_stdout(odm_file_protocol().args([
+        "--root",
+        root_s,
+        "--json",
+        "project",
+        "add",
+        "nested",
+        "--path",
+        "vendor/nested",
+        "--url",
+        bare.to_str().unwrap(),
+        "--branch",
+        "main",
+        "--gitlink",
+    ]));
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["name"], "nested");
+    assert_eq!(v["materialized"], "gitlink_added");
+
+    assert!(root.join("vendor/nested").exists());
+    let cfg = fs::read_to_string(root.join(".odm/odm.config.yaml")).unwrap();
+    assert!(cfg.contains("checkout: gitlink"), "{cfg}");
+    let gi = fs::read_to_string(root.join(".gitignore")).unwrap_or_default();
+    assert!(
+        !gi.contains("vendor/nested"),
+        "gitignore must skip gitlink path: {gi}"
+    );
+    let lock = root.join(".odm/odm.lock.yaml");
+    assert!(
+        !lock.exists() || !fs::read_to_string(&lock).unwrap().contains("nested"),
+        "pin file must not list gitlink name"
+    );
+    assert!(
+        stage_row(&root, "vendor/nested").contains("160000"),
+        "gitlink should be staged"
+    );
+}
+
+/// `odm.git:gitlink-opt-in`
+#[test]
+fn gitlink_add_progen() {
+    let (dir, root) = ws_git_committed();
+    let bare = bare_with_main(dir.path(), "docs");
+    let root_s = root.to_str().unwrap();
+
+    let v = json_stdout(odm_file_protocol().args([
+        "--root",
+        root_s,
+        "--json",
+        "progen",
+        "add",
+        "docs",
+        "--path",
+        "vendor/docs",
+        "--url",
+        bare.to_str().unwrap(),
+        "--branch",
+        "main",
+        "--gitlink",
+    ]));
+    assert_eq!(v["materialized"], "gitlink_added");
+    let cfg = fs::read_to_string(root.join(".odm/odm.config.yaml")).unwrap();
+    assert!(cfg.contains("checkout: gitlink"), "{cfg}");
+}
+
+/// `odm.git:managed-url` `odm.cli:exit-codes`
+#[test]
+fn gitlink_requires_url_cli() {
+    odm()
+        .args([
+            "project",
+            "add",
+            "nested",
+            "--path",
+            "vendor/nested",
+            "--gitlink",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("url"));
+    odm()
+        .args([
+            "progen",
+            "add",
+            "docs",
+            "--path",
+            "vendor/docs",
+            "--gitlink",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("url"));
+}
+
+/// `odm.git:rm-keep` `odm.git:gitlink-pin-index`
+#[test]
+fn gitlink_rm_keeps_tree() {
+    let (dir, root) = ws_git_committed();
+    let bare = bare_with_main(dir.path(), "nested");
+    let root_s = root.to_str().unwrap();
+
+    odm_file_protocol()
+        .args([
+            "--root",
+            root_s,
+            "project",
+            "add",
+            "nested",
+            "--path",
+            "vendor/nested",
+            "--url",
+            bare.to_str().unwrap(),
+            "--branch",
+            "main",
+            "--gitlink",
+        ])
+        .assert()
+        .success();
+    let nested = root.join("vendor/nested");
+    assert!(nested.exists());
+    let before = head_sha(&root);
+
+    odm()
+        .args(["--root", root_s, "project", "rm", "nested"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed project nested"));
+
+    assert!(nested.exists(), "rm keeps the tree");
+    assert_eq!(head_sha(&root), before, "rm must not commit workspace root");
+    assert!(
+        !stage_row(&root, "vendor/nested").contains("160000"),
+        "rm must unstage the gitlink"
+    );
+    odm()
+        .args(["--root", root_s, "project", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nested").not());
+    let lock = root.join(".odm/odm.lock.yaml");
+    assert!(
+        !lock.exists() || !fs::read_to_string(&lock).unwrap().contains("nested"),
+        "pin file must not list gitlink name"
+    );
 }

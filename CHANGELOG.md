@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitlinkRecord** — `Git::gitlink_record`, `list_gitlinks`, and `unstage_gitlink` (`git rm --cached`) in odm-git. Record is Missing, Recorded (index SHA), or Conflict. Porcelain prefixes stay in the crate. Unstage does not commit and does not empty the work tree.
 - **Git::submodule_add / submodule_update_init / update_gitlink** — add a gitlink without recurse or remote, path-limited init, and stage a SHA with `update-index --cacheinfo 160000`. None commit the workspace root.
 - **Gitlink materialize** — `materialize` on `CheckoutMode::Gitlink` requires a git workspace root. Missing path and missing record runs `submodule add`; missing path and recorded gitlink runs `update --init`; matching origin is already present. Origin mismatch or clone-vs-gitlink occupancy fails. Never deletes user data. Never recurses. `rewrite_gitmodules` writes `.gitmodules` from config gitlink entries. `membership_add` skips pin auto-maintain for gitlink and leaves the declaration if materialize fails.
+- **CLI `--gitlink`** — `odm project add --gitlink` and `odm progen add --gitlink` require `--url` (usage 1 otherwise). JSON materialize label is `gitlink_added`. rm un-declares, unstages the gitlink, keeps the tree unless `--delete`, does not commit the workspace root, and does not write a lock key for that name. No `odm submodule` command.
 
 ### Changed
 

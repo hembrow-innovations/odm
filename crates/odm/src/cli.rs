@@ -200,6 +200,8 @@ pub enum ProjectCmd {
         type_: Option<String>,
         #[arg(long)]
         no_clone: bool,
+        #[arg(long, requires = "url")]
+        gitlink: bool,
     },
     /// Remove a project entry.
     Rm {
@@ -280,6 +282,8 @@ pub enum ProgenCmd {
         branch: Option<String>,
         #[arg(long)]
         no_clone: bool,
+        #[arg(long, requires = "url")]
+        gitlink: bool,
     },
     /// Remove a progen entry.
     Rm {

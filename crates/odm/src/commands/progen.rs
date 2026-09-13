@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use odm_core::{
-    build_status, path_buf_to_rel, OdmError, PinState, ProgenEntry, StatusSnapshot, Workspace,
+    build_status, path_buf_to_rel, CheckoutMode, OdmError, PinState, ProgenEntry, StatusSnapshot,
+    Workspace,
 };
 use odm_git::Git;
 use odm_progen::{
@@ -14,7 +15,9 @@ use odm_progen::{
 };
 use serde::Serialize;
 
-use crate::commands::materialize::{format_progen_add_human, materialize_json_opt};
+use crate::commands::materialize::{
+    format_progen_add_human, materialize_add_json, unstage_and_rewrite_gitlink,
+};
 use crate::ctx::Ctx;
 use crate::present::{json_value, NamedMaterialize, NamedOk, Present, Ready};
 
@@ -220,13 +223,18 @@ pub fn add_cmd(
     url: Option<String>,
     branch: Option<String>,
     no_clone: bool,
+    gitlink: bool,
 ) -> Result<Ready<NamedMaterialize>, OdmError> {
     let rel = path_buf_to_rel(path)?;
     let entry = ProgenEntry {
         path: rel,
         url,
         branch,
-        ..Default::default()
+        checkout: if gitlink {
+            CheckoutMode::Gitlink
+        } else {
+            CheckoutMode::Clone
+        },
     };
     let outcome = add_progen(
         &ctx.git,
@@ -236,7 +244,7 @@ pub fn add_cmd(
         entry,
         no_clone,
     )?;
-    let dto = NamedMaterialize::new(name, materialize_json_opt(outcome));
+    let dto = NamedMaterialize::new(name, materialize_add_json(outcome, gitlink));
     Ok(Ready::ok(dto, format_progen_add_human(name, outcome)))
 }
 
@@ -246,6 +254,12 @@ pub fn rm_cmd(
     delete: bool,
     force: bool,
 ) -> Result<Ready<NamedOk>, OdmError> {
+    let gitlink_path = ctx
+        .ws
+        .config
+        .progens
+        .get(name)
+        .and_then(|e| (e.checkout == CheckoutMode::Gitlink).then(|| e.path.clone()));
     rm_progen(
         &ctx.git,
         &ctx.ws.root,
@@ -254,6 +268,9 @@ pub fn rm_cmd(
         delete,
         force,
     )?;
+    if let Some(rel) = gitlink_path {
+        unstage_and_rewrite_gitlink(&ctx.git, &ctx.ws.root, &ctx.ws.config, &rel)?;
+    }
     Ok(Ready::ok(
         NamedOk::new(name),
         format!("removed progen {name}"),
