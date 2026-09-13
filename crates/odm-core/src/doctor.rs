@@ -1,15 +1,19 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use odm_git::Git;
+use odm_git::{Git, GitlinkRecord};
 use serde::Serialize;
 
-use crate::config::{odm_dir, pin_path, Workspace};
+use crate::checkout::all_managed;
+use crate::config::{odm_dir, pin_path, CheckoutMode, Workspace};
 use crate::error::OdmError;
 use crate::gitignore::{
     ancestor_gitignore_has_drift, apply_managed_gitignore, workspace_gitignore_has_drift,
 };
+use crate::gitmodules::{gitmodules_has_drift, rewrite_gitmodules};
 use crate::observation::{observe_workspace, EntityObservation};
+use crate::paths::abs_checkout;
 use crate::pin::{is_full_sha, load_pin, parse_pin_yaml};
 use crate::url_match::urls_match_with_root;
 
@@ -61,6 +65,7 @@ fn apply_fixes<R: odm_git::CommandRunner>(
         // Still rewrite ignore files if manage is on (doctor --fix allowlist).
         apply_managed_gitignore(&ws.root, &ws.config)?;
     }
+    rewrite_gitmodules(&ws.root, &ws.config)?;
     Ok(())
 }
 
@@ -102,6 +107,7 @@ fn collect_checks<R: odm_git::CommandRunner>(
     }
 
     checks.push(gitignore_drift_check(ws, git)?);
+    checks.extend(gitlink_checks(git, ws)?);
     checks.extend(pin_checks(ws)?);
     checks.extend(crate::doctor_worktree::worktree_checks(git, ws));
 
@@ -227,6 +233,121 @@ fn push_entity_path_checks(
                 message: format!("{kind} '{name}' origin missing or unreadable"),
                 fixable: false,
             });
+        }
+    }
+}
+
+fn gitlink_checks<R: odm_git::CommandRunner>(
+    git: &Git<R>,
+    ws: &Workspace,
+) -> Result<Vec<DoctorCheck>, OdmError> {
+    let mut checks = Vec::new();
+    let drift = gitmodules_has_drift(&ws.root, &ws.config);
+    checks.push(if drift {
+        DoctorCheck {
+            id: "gitmodules_layout".into(),
+            status: CheckStatus::Fail,
+            message: ".gitmodules differs from config gitlink entries".into(),
+            fixable: true,
+        }
+    } else {
+        DoctorCheck {
+            id: "gitmodules_layout".into(),
+            status: CheckStatus::Pass,
+            message: ".gitmodules matches config gitlink entries".into(),
+            fixable: true,
+        }
+    });
+
+    let git_dir = ws.root.join(".git");
+    if !git_dir.is_dir() && !git_dir.is_file() {
+        return Ok(checks);
+    }
+
+    let managed = all_managed(&ws.config);
+    let gitlink_paths: BTreeSet<String> = managed
+        .iter()
+        .filter(|e| e.checkout == CheckoutMode::Gitlink)
+        .map(|e| e.path.replace('\\', "/"))
+        .collect();
+    let clone_paths: BTreeSet<String> = managed
+        .iter()
+        .filter(|e| e.checkout != CheckoutMode::Gitlink)
+        .map(|e| e.path.replace('\\', "/"))
+        .collect();
+    let listed: BTreeSet<String> = git
+        .list_gitlinks(&ws.root)?
+        .into_iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+
+    let extras: Vec<String> = listed
+        .iter()
+        .filter(|p| !gitlink_paths.contains(*p) && !clone_paths.contains(*p))
+        .cloned()
+        .collect();
+    checks.push(named_list_check(
+        "gitlink_extra",
+        extras,
+        "index gitlink not in config",
+        "no extra gitlinks",
+    ));
+
+    let mut missing = Vec::new();
+    let mut conflict = Vec::new();
+    let mut mismatch = Vec::new();
+    for e in &managed {
+        let rec = git.gitlink_record(&ws.root, Path::new(&e.path))?;
+        if e.checkout == CheckoutMode::Gitlink {
+            match rec {
+                GitlinkRecord::Missing => missing.push(e.name.clone()),
+                GitlinkRecord::Conflict => conflict.push(e.name.clone()),
+                GitlinkRecord::Recorded { .. } => {}
+            }
+            if let Ok(abs) = abs_checkout(&ws.root, &e.path) {
+                if abs.join(".git").is_dir() {
+                    mismatch.push(e.name.clone());
+                }
+            }
+        } else if listed.contains(&e.path.replace('\\', "/")) {
+            mismatch.push(e.name.clone());
+        }
+    }
+    checks.push(named_list_check(
+        "gitlink_missing",
+        missing,
+        "declared gitlink with no index record",
+        "declared gitlinks have index records",
+    ));
+    checks.push(named_list_check(
+        "gitlink_conflict",
+        conflict,
+        "gitlink index is in conflict",
+        "no gitlink index conflicts",
+    ));
+    checks.push(named_list_check(
+        "checkout_mismatch",
+        mismatch,
+        "checkout mode does not match occupancy",
+        "checkout mode matches occupancy",
+    ));
+    Ok(checks)
+}
+
+fn named_list_check(id: &str, names: Vec<String>, fail_msg: &str, pass_msg: &str) -> DoctorCheck {
+    if names.is_empty() {
+        DoctorCheck {
+            id: id.into(),
+            status: CheckStatus::Pass,
+            message: pass_msg.into(),
+            fixable: false,
+        }
+    } else {
+        DoctorCheck {
+            id: id.into(),
+            status: CheckStatus::Fail,
+            message: format!("{fail_msg}: {}", names.join(", ")),
+            fixable: false,
         }
     }
 }

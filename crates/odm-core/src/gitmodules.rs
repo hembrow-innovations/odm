@@ -12,24 +12,16 @@ pub fn gitmodules_path(root: &Path) -> std::path::PathBuf {
     root.join(".gitmodules")
 }
 
-/// Write `.gitmodules` from config gitlink entries. Removes the file when none.
-pub fn rewrite_gitmodules(root: &Path, config: &WorkspaceConfig) -> Result<(), OdmError> {
+/// Desired `.gitmodules` body from config gitlink entries. `None` means the file should not exist.
+pub fn desired_gitmodules(config: &WorkspaceConfig) -> Option<String> {
     let mut entries: Vec<_> = all_managed(config)
         .into_iter()
         .filter(|e| e.checkout == CheckoutMode::Gitlink)
         .collect();
     entries.sort_by(|a, b| a.path.cmp(&b.path).then_with(|| a.name.cmp(&b.name)));
-
-    let path = gitmodules_path(root);
     if entries.is_empty() {
-        if path.exists() {
-            fs::remove_file(&path).map_err(|e| {
-                OdmError::operation(format!("failed to remove {}: {e}", path.display()))
-            })?;
-        }
-        return Ok(());
+        return None;
     }
-
     let mut body = String::new();
     for e in &entries {
         body.push_str(&format!("[submodule \"{}\"]\n", e.path));
@@ -39,7 +31,31 @@ pub fn rewrite_gitmodules(root: &Path, config: &WorkspaceConfig) -> Result<(), O
             body.push_str(&format!("\tbranch = {branch}\n"));
         }
     }
-    atomic_write(&path, &body)
+    Some(body)
+}
+
+pub fn gitmodules_has_drift(root: &Path, config: &WorkspaceConfig) -> bool {
+    let path = gitmodules_path(root);
+    match desired_gitmodules(config) {
+        None => path.exists(),
+        Some(desired) => fs::read_to_string(&path).ok().as_deref() != Some(desired.as_str()),
+    }
+}
+
+/// Write `.gitmodules` from config gitlink entries. Removes the file when none.
+pub fn rewrite_gitmodules(root: &Path, config: &WorkspaceConfig) -> Result<(), OdmError> {
+    let path = gitmodules_path(root);
+    match desired_gitmodules(config) {
+        None => {
+            if path.exists() {
+                fs::remove_file(&path).map_err(|e| {
+                    OdmError::operation(format!("failed to remove {}: {e}", path.display()))
+                })?;
+            }
+            Ok(())
+        }
+        Some(body) => atomic_write(&path, &body),
+    }
 }
 
 #[cfg(test)]
@@ -104,5 +120,30 @@ mod tests {
         fs::write(gitmodules_path(root), "[submodule \"gone\"]\n").unwrap();
         rewrite_gitmodules(root, &WorkspaceConfig::default()).unwrap();
         assert!(!gitmodules_path(root).exists());
+    }
+
+    #[test]
+    fn gitmodules_layout_drift_then_rewrite_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut cfg = WorkspaceConfig::default();
+        cfg.projects.insert(
+            "nested".into(),
+            ProjectEntry {
+                path: "vendor/nested".into(),
+                url: Some("https://example.com/nested.git".into()),
+                checkout: CheckoutMode::Gitlink,
+                ..Default::default()
+            },
+        );
+        assert!(gitmodules_has_drift(root, &cfg));
+        fs::write(gitmodules_path(root), "[submodule \"stale\"]\n").unwrap();
+        assert!(gitmodules_has_drift(root, &cfg));
+        rewrite_gitmodules(root, &cfg).unwrap();
+        assert!(!gitmodules_has_drift(root, &cfg));
+        assert_eq!(
+            fs::read_to_string(gitmodules_path(root)).unwrap(),
+            desired_gitmodules(&cfg).unwrap()
+        );
     }
 }
