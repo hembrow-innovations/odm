@@ -10,8 +10,8 @@ odm progen rm <name> [--delete] [--force]
 ```
 
 Same add/rm/materialize semantics as Projects. `--gitlink` sets `checkout: gitlink`
-(opt-in gitlink). Clones remain the default. Entity summary verb is **`info`**
-(not `get` — `get` is a note-by-id store verb).
+(opt-in gitlink) and requires `--url`. Clones remain the default. Entity summary
+verb is **`info`** (not `get` — `get` is a note-by-id store verb).
 
 Path-only Progens are valid (local Markdown vaults with no remote).
 

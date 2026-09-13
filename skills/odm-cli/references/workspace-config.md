@@ -100,7 +100,8 @@ pins:
 - Auto-created on first successful managed clone materialize **if** Workspace root is a git repo.
 - Auto-maintained after successful clone/sync/git-on-Primary that moves HEAD.
 - Gitlink names are not listed. Pin authority for gitlink is the parent index SHA.
-- Record is **`odm pin record`**. Apply is **explicit**: `odm pin apply`.
+- **`odm pin record`** stages gitlink child HEAD into the parent index (gitlink names only; does not commit). Clone pins are auto-maintained, not recorded by that verb.
+- Apply is **explicit**: `odm pin apply` (clones from this file; gitlink from the parent index).
 
 ## What config does not contain
 

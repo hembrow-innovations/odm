@@ -14,7 +14,7 @@ odm project git <name> [--wt <slot>] -- <git-args…>
 
 - Writes Project entry into Workspace config.
 - If `url` set and checkout is not gitlink: materializes (clone) unless `--no-clone`.
-- `--gitlink` sets `checkout: gitlink` (opt-in gitlink). Clones remain the default.
+- `--gitlink` sets `checkout: gitlink` (opt-in gitlink). Requires `--url` (usage 1 otherwise). Clones remain the default. Gitlink is membership, not isolation.
 - `path` is relative to Workspace root.
 - `--branch` is clone checkout preference only — **not** a pin.
 
@@ -50,10 +50,10 @@ odm sync api          # one entity
 
 ## Sync vs pin
 
-- **`odm sync [name…]`**: materialize missing managed clones + **fetch only**. Never checkout/reset/merge.
-- **`odm pin record`**: named record verb. Clones: lock SHA. Gitlink: parent index SHA. The pin file does not list gitlink names.
-- **`odm pin status`**: compare pin file SHAs vs current HEAD for clones.
-- **`odm pin apply [--force]`**: checkout each clone pin `rev` as **detached HEAD**. Dirty needs `--force`. Gitlink names are not listed.
+- **`odm sync [name…]`**: materialize if needed, then **fetch only**. Never checkout/reset/merge. Gitlink: fetch in the child; child HEAD and parent gitlink SHA stay put. Clone pin file auto-maintains. Gitlink names are not written to the pin file.
+- **`odm pin record [name…] [--force]`**: gitlink only. Stages child HEAD into the parent index (`update-index`). Does not commit. Empty names = all gitlink-managed entries. Named clone → usage 1. Dirty child → operation 3 unless `--force`. Missing path/repo → 4. Prints that the parent index is dirty until you commit.
+- **`odm pin status`**: clone lock file vs current HEAD. Gitlink `in_sync` compares parent index SHA to child HEAD.
+- **`odm pin apply [name…] [--force]`**: detached HEAD. Clone names use the lock file `rev`. Gitlink names use the parent index SHA. Empty names apply both sources. Dirty needs `--force`. Mixed names use each name's PinSource.
 
 `in_sync` means **SHA match only**, not “checked out on a branch.”
 
@@ -78,6 +78,7 @@ odm project worktree prune --all [--force]
 - **`--wt` never auto-creates.** Missing slot path → exit **4**.
 - Prefer `--branch` on `add` when Primary already has the default branch checked out
   (git cannot create a second worktree on the same branch without a new branch name).
+- Parallel feature work belongs on slots of a **clone** Project. Gitlink is one parent-index SHA.
 - `status` / `info` report `worktree_slots` and `worktree_orphans`.
 - Doctor warns on orphans (`worktree orphan`) and dirty registered slots
   (`worktree_dirty:<project>:<slot>`) — observation only; use `prune` / git to fix.

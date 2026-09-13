@@ -47,10 +47,24 @@ Passthrough after spawn: `run`, `project git` may exit outside 0–4.
 - Expected: sync is **fetch only**.
 - Fix: `odm pin apply` (detached HEAD at pin) or `odm project git <name> -- checkout <ref>`.
 
-### Dirty tree blocks pin apply / delete
+### Dirty tree blocks pin apply / delete / pin record
 
 - Use `--force` only when intentional.
 - Or clean/stash via `odm project git <name> -- status` first.
+- `odm pin record` on a named **clone** is usage 1. Record is gitlink-only.
+
+### `--gitlink` without `--url` / exit 1
+
+- `--gitlink` requires `--url`.
+
+### `odm pin record` / `--gitlink` unknown on PATH
+
+- Released `odm 0.1.1` lacks gitlink. Build from this repository.
+
+### Doctor gitlink fails
+
+- Codes: `gitlink_extra`, `gitlink_missing`, `gitlink_conflict`, `checkout_mismatch`, `gitmodules_layout`.
+- `--fix` may rewrite `.gitmodules` and gitignore from config. It does not import extra gitlinks, rewrite remotes, or pin apply.
 
 ### `find` returns nothing but notes exist
 
@@ -84,15 +98,15 @@ Passthrough after spawn: `run`, `project git` may exit outside 0–4.
 
 | Command | Scope |
 |---------|--------|
-| `odm doctor` | ODM-side: config, gitignore, pin basics, worktree orphan/dirty warns |
-| `odm doctor --fix` | Mechanical ODM repairs only — no destructive git, no orphan delete |
+| `odm doctor` | ODM-side: config, gitignore, pin basics, worktree orphan/dirty warns, gitlink occupancy |
+| `odm doctor --fix` | Mechanical ODM repairs only — `.gitmodules` / gitignore from config; no destructive git, no orphan delete, no extra-gitlink import |
 | `odm progen doctor` | Store-side: vault path + index health |
 
 ## When docs disagree with the binary
 
 Trust in this order:
 
-1. Live `odm <cmd> --help` and `--json` output
+1. `odm <cmd> --help` and `--json` from a binary built from this repository (not a stale PATH `0.1.1`)
 2. https://hembrow-innovations.github.io/odm-web/
 3. This skill (may lag a release)
 
@@ -102,6 +116,9 @@ If you were about to run any of these, stop:
 
 - `odm serve` / MCP
 - `odm submodule` (opt-in gitlink is `--gitlink` / `checkout: gitlink`)
+- treating gitlink as the default membership
+- `odm pr` / forge commands
+- `odm pin record` on a clone name
 - `odm project sync`
 - path-valued `--project ./apps/api`
 - top-level `odm <action-name>` instead of `odm run <action-name>`

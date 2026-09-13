@@ -15,7 +15,7 @@ Agent operator guide for **`odm`** — poly-repo workspace OS for humans and AI
 agents. One config (`.odm/odm.config.yaml`), one binary, orchestrated
 **Projects** + **Progens** (clones by default, opt-in gitlink, no MCP server).
 
-**Docs:** https://hembrow-innovations.github.io/odm-web/
+**Docs:** https://hembrow-innovations.github.io/odm-web/ — Gitlink and `pin record` are Unreleased in this tree. PATH `odm` `0.1.1` may lack them.
 
 ## Agent defaults
 
@@ -32,7 +32,7 @@ odm pin status --json
    `--project`, `--progen`, `--progen-group`, `--wt`.
 4. Discovery: walk up from cwd for `.odm/odm.config.yaml` (stops at `$HOME` /
    FS root). Or pin with `--root <path>` (exact; **no** upward walk).
-5. On failure: `odm <cmd> --help`, then `status` / `doctor`, then site docs.
+5. On failure: `odm <cmd> --help` from the binary you are actually running, then `status` / `doctor`, then site docs. If help has no `--gitlink` / `pin record`, you are on `0.1.1`; use a binary built from this repository.
 
 ## Domain (mini glossary)
 
@@ -42,8 +42,8 @@ odm pin status --json
 - **Progen group** — config-only list of Progen names for query scope.
 - **Primary checkout** — Project main tree at its config `path`.
 - **Worktree slot** — named parallel git worktree at `worktrees/<project>/<slot>/`.
-- **Gitlink**: opt-in membership (`checkout: gitlink`). Clones remain the default. Pin authority is the parent index SHA. The pin file does not list gitlink names.
-- **Pin file** — `.odm/odm.lock.yaml` locked SHAs for managed clone (`url`) entries. Gitlink names are not listed.
+- **Gitlink**: opt-in membership (`checkout: gitlink`), not default, not a parallel-work primitive. Pin authority is the parent index SHA. The pin file does not list gitlink names. Isolation on one Project is worktree slots.
+- **Pin file** — `.odm/odm.lock.yaml` locked SHAs for managed **clone** entries. Auto-maintained. Gitlink names are not listed. `odm pin record` stages gitlink child HEAD into the parent index only.
 - **Action** — named task from action bundles; only via `odm run`.
 - **Generator** — local template scaffold; via `odm generate`.
 
@@ -129,15 +129,17 @@ odm init --json                   # { "root", "git" }
 ```bash
 odm sync                          # all managed (url) entries: materialize + fetch ONLY
 odm sync api docs                 # named entities only
-odm pin record                    # clones: lock SHA; gitlink: parent index SHA (not a lock row)
-odm pin apply                     # detached HEAD at pin rev for all pinned clones
+odm pin record                    # gitlink only: stage child HEAD into parent index (does not commit)
+odm pin record nested --force     # dirty child; named clone → usage 1
+odm pin apply                     # clones from lock file + gitlinks from parent index; detached HEAD
 odm pin apply api --force         # dirty trees need --force
 odm pin status --json
 ```
 
-**Hard rule:** `sync` never checkout/reset/merge. Use `pin record` then
-`pin apply` for locked revs. `in_sync` = SHA match only (not “on a branch”).
-Clones remain the default. Gitlink is opt-in (`--gitlink` / `checkout: gitlink`).
+**Hard rule:** `sync` never checkout/reset/merge. Clone pins auto-maintain in
+the pin file. `pin record` is gitlink-only. `pin apply` restores detached HEAD.
+`in_sync` = SHA match only (not “on a branch”). Clones remain the default.
+Gitlink is opt-in (`--gitlink` / `checkout: gitlink`). `--gitlink` requires `--url`.
 
 ### Projects
 
@@ -145,7 +147,7 @@ Clones remain the default. Gitlink is opt-in (`--gitlink` / `checkout: gitlink`)
 odm project list --json
 odm project info api --json
 odm project add api --path apps/api --url <git-url> [--branch main] [--type service]
-odm project add nested --path vendor/nested --url <git-url> --gitlink
+odm project add nested --path vendor/nested --url <git-url> --gitlink  # requires --url
 odm project add local --path apps/local --no-clone   # config only
 odm project rm api                    # un-declare; tree kept
 odm project rm api --delete           # remove tree if clean
@@ -172,7 +174,8 @@ odm --project api --wt feat run test
 ```
 
 Missing slot → exit **4**. Prefer `--branch` on `worktree add` when Primary
-already has the default branch checked out.
+already has the default branch checked out. Parallel feature work uses slots on
+a **clone** Primary. Do not use gitlink for isolation.
 
 ### Progens (docs / memory)
 
@@ -230,25 +233,25 @@ generators list OK; run is deferred (exit 1).
 ## Hard rules
 
 1. **Config is sole layout truth** — never invent undeclared Projects/Progens.
-2. **`sync` ≠ checkout** — materialize + fetch only; `pin apply` for detached HEAD at pin.
+2. **`sync` ≠ checkout** — materialize + fetch only; `pin apply` for detached HEAD.
 3. **`in_sync` = SHA match only**.
 4. **`--wt` never auto-creates** (missing → 4).
 5. **Names not paths** on scope flags.
-6. **Managed** = entry has `url`; path-only skips git lifecycle. Gitlink only when `checkout: gitlink` (clones remain the default).
-7. **No `serve` / MCP / daemon** — not shipped; do not invent them. No `odm submodule` command.
+6. **Managed** = entry has `url`; path-only skips git lifecycle. Gitlink only when `checkout: gitlink` (clones remain the default). `--gitlink` requires `--url`.
+7. **No `serve` / MCP / daemon** — not shipped. No `odm submodule`. No `odm pr`. Gitlink is never the default.
 8. **No path-valued scope flags** and no top-level Action names as CLI verbs.
 9. Prefer **`--json`**; re-orient with `status` / `doctor` after failures.
-10. When unsure shipped vs deferred, trust live `odm <cmd> --help` and the site.
+10. When unsure shipped vs deferred, trust **this tree’s** `odm <cmd> --help` (build from this repo if PATH is `0.1.1`).
 
 ## Decision tree
 
 ```text
 Need layout / health?     → status, doctor, pin status, project|progen list|info
 Bootstrap empty dir?      → init
-Add code/docs repos?      → project add / progen add → sync → pin record → pin status
-Add opt-in gitlink?       → project add / progen add --gitlink
-Lock / restore SHAs?      → pin record / pin apply [--force]
-Parallel agent branch?    → worktree add → --wt <slot> on git|run
+Add clone repos?          → project add / progen add → sync → pin status (clone pins auto-maintain)
+Add opt-in gitlink?       → project add / progen add --gitlink --url … → sync → pin record
+Restore SHAs?             → pin apply [--force] (clones: lock file; gitlink: parent index)
+Parallel feature branch?  → worktree add --branch → --wt <slot> on git|run (clone Primary)
 Search notes?             → find (federated) / context (one note)
 Read note body?           → progen get|body|ls|tree|backlinks
 Run workspace task?       → run <action>
@@ -269,10 +272,26 @@ odm find "architecture" --limit 10 --json
 
 ### Parallel feature work on a Project
 
+Use a clone Project. Gitlink is one parent-index SHA and is the wrong isolation tool. Push and PR stay with git / the forge.
+
 ```bash
 odm project worktree add api feat-x --branch feat/x
 odm --project api --wt feat-x project git api -- status
+odm --project api --wt feat-x run test
 odm project worktree rm api feat-x
+```
+
+### Opt-in gitlink (not default)
+
+`--gitlink` requires `--url`. `pin record` does not commit the workspace root.
+
+```bash
+odm project add nested --path vendor/nested --url https://github.com/acme/nested.git --gitlink
+odm sync nested
+odm pin record nested
+# commit the parent index yourself
+odm pin apply nested
+odm doctor --json
 ```
 
 ### Knowledge lookup for an agent task
@@ -287,6 +306,8 @@ odm progen body welcome --progen notes
 
 - `odm serve`, MCP, long-running agent sessions
 - `odm submodule` (opt-in gitlink is `--gitlink` / `checkout: gitlink`)
+- Gitlink as the default membership
+- `odm pr` / forge / PR bot
 - `init --interactive`
 - Remote generators / template vars / prompts
 - Runtime matrix (no default claude/cursor binary)

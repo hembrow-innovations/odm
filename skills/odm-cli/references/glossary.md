@@ -67,21 +67,24 @@ root-level `odm.config.yaml` (legacy)
 ## Gitlink
 
 Opt-in membership for a managed Project or Progen (`checkout: gitlink`).
-Clones remain the default. Pin authority is the parent index SHA. The pin
-file does not list gitlink names. CLI: `--gitlink` on project and progen add.
+Clones remain the default. Not an isolation primitive (use worktree slots on
+a clone). Pin authority is the parent index SHA. The pin file does not list
+gitlink names. CLI: `--gitlink` on project and progen add (requires `--url`).
+`odm pin record` stages child HEAD into the parent index and does not commit.
 There is no `odm submodule` command.
 
-_Avoid:_ default membership, submodule (as the ODM entity name)
+_Avoid:_ default membership, submodule (as the ODM entity name), worktree slot
 
 ## Pin file
 
-Optional lock of resolved revisions for managed clone checkouts:
+Optional lock of resolved revisions for managed **clone** checkouts:
 `.odm/odm.lock.yaml`. Not layout truth. Gitlink names are not listed. Created
 when the Workspace is a git repo and managed clones succeed; auto-maintained
-while present; **record** is `odm pin record`; **apply is explicit**
-(`odm pin apply`).
+while present. **`odm pin record`** is gitlink-only (parent index, not a lock
+row). **Apply is explicit** (`odm pin apply`): clones from the lock file,
+gitlink from the parent index.
 
-_Avoid:_ lockfile (unless paired with “Pin file”), listing gitlink names
+_Avoid:_ lockfile (unless paired with “Pin file”), listing gitlink names, using `pin record` on clones
 
 ## Action
 
