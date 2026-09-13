@@ -3,7 +3,7 @@
 use odm_git::Git;
 
 use crate::checkout::ManagedEntity;
-use crate::config::Workspace;
+use crate::config::{CheckoutMode, Workspace};
 use crate::error::OdmError;
 use crate::paths::{abs_checkout, worktree_slot_path};
 use crate::pin_maintain::maintain_pins_after;
@@ -61,7 +61,7 @@ pub fn project_git<R: odm_git::CommandRunner>(
 
     let before = git.head_sha(&path).ok();
     let status = git.run(&path, git_args)?;
-    if status.success() {
+    if status.success() && entry.checkout != CheckoutMode::Gitlink {
         if let Some(url) = &entry.url {
             let after = git.head_sha(&path).ok();
             if after.is_some() && after != before {

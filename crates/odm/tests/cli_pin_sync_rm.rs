@@ -585,3 +585,174 @@ fn gitlink_rm_keeps_tree() {
         "pin file must not list gitlink name"
     );
 }
+
+fn gitlink_sha(repo: &Path, rel: &str) -> String {
+    stage_row(repo, rel)
+        .split_whitespace()
+        .nth(1)
+        .expect("gitlink sha")
+        .to_ascii_lowercase()
+}
+
+fn rev_parse(repo: &Path, rev: &str) -> String {
+    let out = Command::new("git")
+        .args(["-C", repo.to_str().unwrap(), "rev-parse", rev])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout)
+        .unwrap()
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn add_gitlink_nested(dir: &Path, root: &Path) {
+    let bare = bare_with_main(dir, "nested");
+    odm_file_protocol()
+        .args([
+            "--root",
+            root.to_str().unwrap(),
+            "project",
+            "add",
+            "nested",
+            "--path",
+            "vendor/nested",
+            "--url",
+            bare.to_str().unwrap(),
+            "--branch",
+            "main",
+            "--gitlink",
+        ])
+        .assert()
+        .success();
+}
+
+/// `odm.git:sync-fetch-only` `odm.cli:sync` `odm.git:gitlink-pin-index`
+#[test]
+fn gitlink_sync_fetch_only() {
+    let (dir, root) = ws_git_committed();
+    add_gitlink_nested(dir.path(), &root);
+    let root_s = root.to_str().unwrap();
+    let nested = root.join("vendor/nested");
+    let child_before = head_sha(&nested);
+    let link_before = gitlink_sha(&root, "vendor/nested");
+    assert_eq!(child_before, link_before);
+
+    let seed = dir.path().join("nested-seed");
+    fs::write(seed.join("MORE"), "x").unwrap();
+    assert!(Command::new("git")
+        .args(["-C", seed.to_str().unwrap(), "add", "MORE"])
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("git")
+        .args(["-C", seed.to_str().unwrap(), "commit", "-m", "more"])
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("git")
+        .args(["-C", seed.to_str().unwrap(), "push", "origin", "main"])
+        .status()
+        .unwrap()
+        .success());
+    let remote_head = head_sha(&seed);
+    assert_ne!(remote_head, child_before);
+
+    let v = json_stdout(odm_file_protocol().args(["--root", root_s, "--json", "sync", "nested"]));
+    let results = v["results"].as_array().expect("results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["name"], "nested");
+    assert_eq!(results[0]["fetched"].as_bool(), Some(true));
+
+    assert_eq!(head_sha(&nested), child_before, "child HEAD must stay put");
+    assert_eq!(
+        gitlink_sha(&root, "vendor/nested"),
+        link_before,
+        "parent gitlink SHA must stay put"
+    );
+    assert!(!nested.join("MORE").exists(), "fetch must not checkout");
+    assert_eq!(rev_parse(&nested, "origin/main"), remote_head);
+    let lock = root.join(".odm/odm.lock.yaml");
+    assert!(
+        !lock.exists() || !fs::read_to_string(&lock).unwrap().contains("nested"),
+        "lock file must not list gitlink name"
+    );
+}
+
+/// `odm.git:gitlink-pin-index` `odm.cli:pin-apply` `odm.git:project-git`
+#[test]
+fn gitlink_status_in_sync() {
+    let (dir, root) = ws_git_committed();
+    add_gitlink_nested(dir.path(), &root);
+    let root_s = root.to_str().unwrap();
+    let nested = root.join("vendor/nested");
+    let link_sha = gitlink_sha(&root, "vendor/nested");
+    let child_head = head_sha(&nested);
+    assert_eq!(link_sha, child_head);
+
+    let st = json_stdout(odm().args(["--root", root_s, "--json", "status"]));
+    let p = st["projects"]
+        .as_array()
+        .expect("projects")
+        .iter()
+        .find(|e| e["name"] == "nested")
+        .expect("nested");
+    assert_eq!(p["pin_state"], "in_sync");
+    assert_eq!(p["pin_rev"].as_str().unwrap(), link_sha);
+    assert_eq!(p["head"].as_str().unwrap(), child_head);
+    assert_eq!(p["dirty"].as_bool(), Some(false));
+
+    let fake = "b".repeat(40);
+    fs::write(
+        root.join(".odm/odm.lock.yaml"),
+        format!(
+            "version: 1\npins:\n  nested:\n    rev: {fake}\n    url: https://example.com/nested.git\n"
+        ),
+    )
+    .unwrap();
+    let st = json_stdout(odm().args(["--root", root_s, "--json", "status"]));
+    let p = st["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "nested")
+        .unwrap();
+    assert_eq!(p["pin_rev"].as_str().unwrap(), link_sha);
+    assert_eq!(p["pin_state"], "in_sync");
+    fs::remove_file(root.join(".odm/odm.lock.yaml")).unwrap();
+
+    fs::write(nested.join("dirty"), "x").unwrap();
+    let st = json_stdout(odm().args(["--root", root_s, "--json", "status"]));
+    let p = st["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "nested")
+        .unwrap();
+    assert_eq!(p["dirty"].as_bool(), Some(true));
+    assert_eq!(p["pin_state"], "in_sync");
+    assert_eq!(p["head"].as_str().unwrap(), child_head);
+
+    git_user(&nested);
+    odm()
+        .args([
+            "--root", root_s, "project", "git", "nested", "--", "add", "dirty",
+        ])
+        .assert()
+        .success();
+    odm()
+        .args([
+            "--root", root_s, "project", "git", "nested", "--", "commit", "-m", "dirty",
+        ])
+        .assert()
+        .success();
+    let lock = root.join(".odm/odm.lock.yaml");
+    assert!(
+        !lock.exists() || !fs::read_to_string(&lock).unwrap().contains("nested"),
+        "project git auto-maintain skips gitlink"
+    );
+}

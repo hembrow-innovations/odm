@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Git::submodule_add / submodule_update_init / update_gitlink** — add a gitlink without recurse or remote, path-limited init, and stage a SHA with `update-index --cacheinfo 160000`. None commit the workspace root.
 - **Gitlink materialize** — `materialize` on `CheckoutMode::Gitlink` requires a git workspace root. Missing path and missing record runs `submodule add`; missing path and recorded gitlink runs `update --init`; matching origin is already present. Origin mismatch or clone-vs-gitlink occupancy fails. Never deletes user data. Never recurses. `rewrite_gitmodules` writes `.gitmodules` from config gitlink entries. `membership_add` skips pin auto-maintain for gitlink and leaves the declaration if materialize fails.
 - **CLI `--gitlink`** — `odm project add --gitlink` and `odm progen add --gitlink` require `--url` (usage 1 otherwise). JSON materialize label is `gitlink_added`. rm un-declares, unstages the gitlink, keeps the tree unless `--delete`, does not commit the workspace root, and does not write a lock key for that name. No `odm submodule` command.
+- **Gitlink sync and status** — `odm sync` on a gitlink name materializes if needed then fetches in the child. Child HEAD and parent gitlink SHA stay put. The lock file is not written for that name. `odm status --json` `in_sync` compares gitlink recorded SHA to child HEAD. Dirty is a separate field. `project git` auto-maintain skips gitlink.
 
 ### Changed
 

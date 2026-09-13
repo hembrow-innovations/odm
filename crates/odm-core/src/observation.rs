@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use odm_git::Git;
+use odm_git::{Git, GitlinkRecord};
 
 use crate::config::{CheckoutMode, WorkspaceConfig};
 use crate::error::OdmError;
@@ -103,9 +103,14 @@ pub fn observe_entity<R: odm_git::CommandRunner>(
     pin: Option<&PinFile>,
 ) -> Result<EntityObservation, OdmError> {
     let pin_present = pin.is_some();
-    let pin_rev = pin
-        .and_then(|p| p.pins.get(name))
-        .map(|e| e.rev.clone());
+    let pin_rev = if checkout == CheckoutMode::Gitlink {
+        match git.gitlink_record(root, Path::new(rel_path)).ok() {
+            Some(GitlinkRecord::Recorded { sha }) => Some(sha),
+            _ => None,
+        }
+    } else {
+        pin.and_then(|p| p.pins.get(name)).map(|e| e.rev.clone())
+    };
 
     let (abs_path, resolve_error, on_disk, is_git, head, origin, dirty) =
         match resolve_under_root(root, rel_path) {
