@@ -3,7 +3,7 @@
 - Commits as work packages: `<type>(<scope>): <description>` — `feat` | `fix` | `test` | `refactor` | `chore`
 - No `Co-Authored-By` lines
 - TDD, DRY, YAGNI; prefer one-liner solutions when clear
-- No product CI test matrix; GitHub Actions allowed only for a **release publish** workflow (tag `v*` / `workflow_dispatch` builds that upload release assets). Pages live in `hembrow-innovations/odm-web`.
+- No product CI test matrix; GitHub Actions allowed only for a **release publish** workflow (tag `v*` / `workflow_dispatch` builds that upload release assets) and a **redirect stub** Pages deploy of `website/` to `hembrow-innovations.github.io/odm`. The visitor site lives in `hembrow-innovations/odm-web`.
 - Worktrees **disabled** — never `git worktree add` or agent isolation worktrees
 - No new git branches for agent work; cleanup when done
 - File size target ≤1000 LOC, hard limit 1250

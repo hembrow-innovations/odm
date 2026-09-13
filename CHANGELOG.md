@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Website** — visitor HTML moved to [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web) (https://hembrow-innovations.github.io/odm-web/).
+- **Website** — visitor HTML moved to [hembrow-innovations/odm-web](https://github.com/hembrow-innovations/odm-web) (https://hembrow-innovations.github.io/odm-web/). `https://hembrow-innovations.github.io/odm/` is a redirect stub.
 
 ### Removed
 
